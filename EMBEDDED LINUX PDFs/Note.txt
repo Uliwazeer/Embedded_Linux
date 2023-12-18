@@ -1,0 +1,84 @@
+Embedded Linux tutorial
+
+www. learn-in-depth .com
+or
+https://drive.google.com/drive/folders/1rHnM5Q70x2f1bcMJORJjZJ_GvnDiNfo_?fbclid=IwAR1eRaFXcwIjRE6XydgZgG7cbsLhpMGtnmChBZhEpNhK2Ft1q8QkyVNk3A8
+======
+Embedded Linux (PART 1)
+•Introduction to Embedded System
+•Historical Background
+•Course Outline
+•Loading, Linking, and Address Binding
+•Memory Management Concepts
+•Fragmentation
+===========
+Embedded Linux (PARRT 2)
+•Paging & segmentation
+•virtual memory upon the paging techniques.
+=======
+Embedded Linux (PART 3)
+• Basic I/O Concepts
+•Kernel modules/Process Management in Linux
+•OS: Abstraction Provider
+•Processes
+•Signals
+========
+Embedded Linux (PART 4)
+•Alarm
+•Read/Write Directories/Files
+•Pthread
+•pthread mutexes
+•Socket Programming
+•Linux Command Line Interface CLI
+•Linux File-System Hierarchy
+============
+Embedded Linux (PART 5)
+•Basics Linux commands
+•Using Wild Cards
+•Linux Help Commands
+•Composite Commands
+•Shell script
+•Searching Text (grep Command)
+•Comparing Text Files
+• Git
+=============
+Embedded Linux (PART 6)
+•Cross-compiling toolchains
+•ToolChain Components
+•Labs
+============
+Embedded Linux (PART 7)
+•GNU Cross-Platform Development Toolchain
+•Bootloaders
+•The boot sequence on (DRAM SYSTEM)
+•3 phases boot sequence inside Bootloaders
+•The U-boot bootloader
+•Booting From SDCARD / TFTP server
+•U-Boot Environment Variables
+===================
+Embedded Linux (PART 8)
+•Lab6: Build/Run Uboot for Raspberry Pi2
+•Lab7: Build/Run Uboot for BeagleBone Black
+•Lab8: Debug the U-Boot Code
+•port U-boot to a new board (Basics)
+•Project “Simple Concept implementation for OTA SW”
+===================
+Embedded Linux (PART 9)
+•Linux kernel Basics
+•Building the Linux Kernel
+•Lab1:Buildng/running Linux Kernel on Vexpress A9
+•Lab2: Build/Run Linux on RPI2
+•Device trees
+•Linux Start-Up Sequence
+================
+Embedded Linux (PART 10)
+•Root File System
+•File System Contents
+•How to create a minimal root filesystem ?
+•The Init Process
+•Busybox
+•File System Types
+•Build Root
+•Third Project
+•PART9 Appendix
+==========================
