@@ -1,0 +1,199 @@
+Timer
+Introduction
+What is a timer in general? According to Wikipedia, A timer is a specialized type of clock used for measuring specific time intervals. Timers can be categorized into two main types.
+
+A timer that counts upwards from zero for measuring elapsed time is often called a stopwatch, while a device that counts down from a specified time interval is more usually called a timer.
+
+Timer in Linux Kernel
+In Linux, the kernel keeps track of the flow of time by means of timer interrupts. These timer interrupts are generated at regular timer intervals by using the system’s timing hardware.
+
+Every time a timer interrupt occurs, the value of an internal kernel counter is incremented. The counter is initialized to 0 at the system boot, so it represents the number of clock ticks since the last boot.
+
+The kernel timer offers less precision but is more efficient in situations where the timer will probably be canceled before it fires. There are many places in the kernel where timers are used to detect when a device or a network peer has failed to respond within the expected time.
+
+When you want to do some action after some time, then kernel timers are one of the options for you. These timers are used to schedule the execution of a function at a particular time in the future, based on the clock tick, and can be used for a variety of tasks.
+
+Uses of Kernel Timers
+Polling a device by checking its state at regular intervals when the hardware can’t fire interrupts.
+The user wants to send some messages to another device at regular intervals.
+Send an error when some action didn’t happen in a particular time period.
+Kernel Timer API
+Linux Kernel provides the driver to create timers that are not periodic by default, register the timers and delete the timers.
+
+We need to include the <linux/timer.h> (#include <linux/timer.h>) in order to use kernel timers. Kernel timers are described by the timer_list structure, defined in <linux/timer.h>:
+
+struct timer_list {
+    /* ... */
+    unsigned long expires;
+    void (*function)(unsigned long);
+    unsigned long data;
+};
+The expires field contains the expiration time of the timer (in jiffies).
+On expiration, function() will be called with the given data value.
+
+Initialize / Setup Kernel Timer
+There are multiple ways to Initialize / Setup Kernel Timer. We’ll see one by one.
+
+init_timer:
+void fastcall init_timer ( struct timer_list * timer);
+
+This function is used to initialize the timer. init_timer must be done to a timer prior to calling any of the other timer functions. If you are using this function to initialize the timer, then you need to set the callback function and data of the timer_list structure manually.
+
+Argument:
+
+timer – the timer to be initialized
+
+setup_timer:
+void setup_timer(timer, function, data);
+
+Instead of initializing the timer manually by calling init_timer, you can use this function to set data and function of timer_list structure and initialize the timer. This is recommended to use.
+
+This API will be available for the older kernel version. If you are using the newer kernel, then you have to use the below API (timer_setup).
+
+Argument:
+
+timer – the timer to be initialized
+
+function – Callback function to be called when the timer expires. In this callback function, the argument will be unsigned long.
+
+data – data has to be given to the callback function
+
+Example:
+/* setup your timer to call my_timer_callback */
+setup_timer(&etx_timer, timer_callback, 0);
+//Timer Callback function. This will be called when timer expires
+void timer_callback(unsigned long data)
+{
+}
+timer_setup:
+If you use a newer kernel version, then setup_timer won’t work. So you need to use this timer_setup function.
+
+void timer_setup(timer, function, data);
+
+Instead of initializing the timer manually by calling init_timer, you can use this function to set data and function of timer_list structure and initialize the timer. This is recommended to use.
+
+Argument:
+
+timer – the timer to be initialized
+
+function – Callback function to be called when the timer expires. In this callback function, the argument will be struct timer_list *.
+
+data – data has to be given to the callback function
+
+Example:
+/* setup your timer to call my_timer_callback */
+timer_setup(&etx_timer, timer_callback, 0);
+//Timer Callback function. This will be called when timer expires
+void timer_callback(struct timer_list * data)
+{
+}
+DEFINE_TIMER:
+DEFINE_TIMER(_name, _function, _expires, _data)
+
+If we are using this method, then no need to create the timer_list structure on our side. The kernel will create the structure in the name of _name and initialize it.
+
+Argument:
+
+_name – name of the timer_list structure to be created
+
+_function – Callback function to be called when the timer expires
+
+_expires – the expiration time of the timer (in jiffies)
+
+_data – data has to be given to the callback function
+
+Start a Kernel Timer
+add_timer:
+void add_timer(struct timer_list *timer);
+
+This will start a timer.
+
+Argument:
+
+timer – the timer needs to be started
+
+Modifying Linux Kernel Timer’s timeout
+mod_timer:
+int mod_timer(struct timer_list * timer, unsigned long expires);
+
+This function is used to modify a timer’s timeout. This is a more efficient way to update the expires field of an active timer (if the timer is inactive it will be activated).
+
+mod_timer(timer, expires) is equivalent to:
+
+del_timer(timer);
+
+timer->expires = expires;
+
+add_timer(timer);
+
+Argument:
+
+timer – the timer needs to modify the timer period
+
+expires – the updated expiration time of the timer (in jiffies)
+
+Return:
+
+The function returns whether it has modified a pending timer or not.
+
+0 – mod_timer of an inactive timer
+
+1 – mod_timer of an active timer
+
+Stop a Kernel Timer in Linux
+The below functions will be used to deactivate the kernel timers.
+
+del_timer:
+int del_timer(struct timer_list * timer);
+
+This will deactivate a timer. This works on both active and inactive timers.
+
+Argument:
+
+timer – the timer needs to be deactivated
+
+Return:
+
+The function returns whether it has deactivated a pending timer or not.
+
+0 – del_timer of an inactive timer
+
+1 – del_timer of an active timer
+
+del_timer_sync:
+int del_timer_sync(struct timer_list * timer);
+
+This will deactivate a timer and wait for the handler to finish. This works on both active and inactive timers.
+
+Argument:
+
+timer – the timer needs to be deactivated
+
+Return:
+
+The function returns whether it has deactivated a pending timer or not.
+
+0 – del_timer_syncof an inactive timer
+
+1 – del_timer_sync of an active timer
+
+Note: callers must prevent restarting the timer, otherwise this function is meaningless. It must not be called from interrupt contexts. The caller must not hold locks that would prevent the completion of the timer’s handler. The timer’s handler must not call add_timer_on. Upon exit, the timer is not queued and the handler is not running on any CPU.
+
+Check the Linux Kernel Timer status
+timer_pending:
+int timer_pending(const struct timer_list * timer);
+
+This will tell whether a given timer is currently pending, or not. Callers must ensure serialization wrt. other operations done to this timer, eg. interrupt contexts or other CPUs on SMP.
+
+Argument:
+
+timer – the timer needs to check the status
+
+Return:
+
+The function returns whether the timer is pending or not.
+
+0 – timer is not pending
+
+1 – timer is pending
+**************************************************************************

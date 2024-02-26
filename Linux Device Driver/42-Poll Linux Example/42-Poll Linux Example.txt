@@ -1,0 +1,160 @@
+Poll Linux Example Device Driver
+Introduction
+As usual, we will go with the problem first and then the solution.
+
+Let’s assume the case where the app wants to read/write many IOs (Inputs and Outputs) based on its state. What do we do in this case? We have to wait for the IO to reach that specified state (blocking) and then do the IO operation. We will follow the same process for all the IOs. So in this case we may lose the data or timing. So Synchronous and blocking won’t work every time.
+
+We can overcome this by using separate threads for each IOs (clients). Then process that in their threads. But this workaround will work until you have some fewer IOs. What if you are having more IOs and want to monitor that all? That’s where the asynchronous and non-blocking call comes into the picture.
+
+IO Multiplexing
+The solution is to use a kernel mechanism for polling over a set of file descriptors. There are 3 options you can use in Linux:
+
+poll
+select
+epoll
+In this tutorial, we will focus on the poll Linux example.
+
+What is a poll and its use?
+The poll allows a process to determine whether it can read from or write to one or more open files without blocking. The poll is used in applications that must use multiple input or output streams without blocking any one of them.
+
+If you want to use the poll in the application, the driver must support that poll. The poll will monitor multiple file descriptors or single file descriptors with multiple events.
+
+What are the events available?
+There are multiple events available.
+
+POLLIN – This bit must be set if the device can be read without blocking.
+
+POLLRDNORM – This bit must be set if “normal” data is available for reading. A readable device returns (POLLIN | POLLRDNORM).
+
+POLLRDBAND – This bit indicates that out-of-band data is available for reading from the device. It is currently used only in one place in the Linux kernel (the DECnet code) and is not generally applicable to device drivers.
+
+POLLPRI – High-priority data (out-of-band) can be read without blocking. This bit causes select to report that an exception condition occurred on the file because select reports out-of-band data as an exception condition.
+
+POLLHUP – When a process reading this device sees end-of-file, the driver must set POLLHUP (hang-up). A process calling select will be told that the device is readable, as dictated by the select functionality.
+
+POLLERR – An error condition has occurred on the device. When a poll is invoked, the device is reported as both readable and writable, since both read and write will return an error code without blocking.
+
+POLLOUT – This bit is set in the return value if the device can be written to without blocking.
+
+POLLWRNORM – This bit has the same meaning as POLLOUT, and sometimes it actually is the same number. A writable device returns (POLLOUT | POLLWRNORM).
+
+POLLWRBAND – Like POLLRDBAND, this bit means that data with nonzero priority can be written to the device. Only the datagram implementation of the poll uses this bit since a datagram can transmit out-of-band data.
+*******************************************************************************
+How to use a poll in the Application?
+In the application, we have to add the file descriptors into the struct pollfd and the events you want to monitor.
+
+struct pollfd {
+    int   fd;         /* file descriptor */
+    short events;     /* requested events */
+    short revents;    /* returned events */
+};
+Here,
+
+fd           – File descriptor that you want to monitor,
+
+events   – Events that you want to monitor in the file descriptor
+
+revents – If any change in the descriptor, the occurred events will be written into this member by the kernel.
+
+Example:
+
+#include <poll.h>
+struct pollfd pfd;
+pfd.fd = fd;                                                  // File Descriptor that you want to monitor
+pfd.events = ( POLLIN | POLLRDNORM | POLLOUT | POLLWRNORM );  // Event that you want to monitor for this fd
+Note: You can add multiple file descriptors by creating struct pollfd pfd[num_of_fd];.
+
+Once you create the structure and initialized it, then call the poll().
+
+int poll(struct pollfd *fds, nfds_t nfds, int timeout);
+
+Where,
+
+fds – file descriptors array
+
+nfds – number of file descriptors
+
+timeout – specifies the number of milliseconds that poll() should block waiting for a file descriptor to become ready. The call will block until either:
+
+a file descriptor becomes ready,
+the call is interrupted by a signal handler, or
+the timeout expires.
+When you set timeout as -1, then there is no timeout and it will work like a blocking call.
+
+Return:
+
+On success, a positive number is returned; this is the number of structures that have nonzero revents fields (in other words, those descriptors with events or errors reported). A value of  0 indicates that the call timed out and no file descriptors were ready. On error, -1 is returned and errno is set appropriately.
+
+How to use a poll in the Linux Device Driver?
+wait queue
+In the Linux device driver, the poll is internally using the wait queue. So we have to declare the wait queue and initialize that. You can use static or dynamic method.
+
+Example
+
+#include <linux/wait.h>                 //Required for the wait queues
+/* Static method */
+//Waitqueue
+DECLARE_WAIT_QUEUE_HEAD(wait_queue_etx_data);
+/* Dynamic method */
+//Initialize wait queue
+init_waitqueue_head(&wait_queue_etx_data);
+poll_wait
+In the driver, we need to define poll_wait function and assign that to the file operation’s structure.
+
+unsigned int (*poll) (struct file *filp, struct poll_table_struct *wait);
+
+Where,
+
+filep – File Structure.
+
+wait – Poll table, We can add one or more wait queues into this table.
+
+Example
+
+/*
+** This fuction will be called when app calls the poll function
+*/
+static unsigned int etx_poll(struct file *filp, struct poll_table_struct *wait)
+{
+  __poll_t mask = 0;
+  
+  pr_info("Poll function\n");
+  
+  /* Do your Operation */
+    
+  return mask;
+}
+/*
+** File operation sturcture
+*/
+static struct file_operations fops =
+{
+  .poll           = etx_poll
+};
+*******************************************************************************
+How do the poll_wait is working?
+Whenever the application calls the poll function, the kernel calls the poll_wait of the driver with the file structure and poll_table. In that poll table, we need to add the wait queue that we have created. Then this poll_wait will immediately return.
+
+When we got something we wanted, we can wake up the wait queue. That will again call the poll_wait as wait queue is part of the poll table. Then we have to return the proper event to the application.
+
+For example, we got some free memory space in the kernel. So, we want to tell the application to write into the memory. The application will keep on checking the poll function if we have given a timeout as an argument. Otherwise, It will be blocked. When we found free space, we will wake up the wait queue. So, poll_wait function will be getting called. Then we check whether we got free space or not. If we got free space then we return (POLLOUT | POLLWRNORM) from the poll_wait function. This event will be written into the application’s struct pollfd‘s revents member. Then the application will check revents and write the data to the kernel space as we sent  (POLLOUT | POLLWRNORM). If we don’t find free space we will return 0 from the poll_wait. So, the kernel will again wait for the wake-up of the wait queue.
+
+I know that you got confused. You will feel good when you see the example and work out that example.
+
+Now, it’s time to make our hands dirty. Let’s start programming.
+
+Poll Linux Example Programming
+This example is just for educational purposes and explains a poll in Linux device driver. This might not be the real use case.
+
+In this example, I’ve created one sysfs entry (/sys/kernel/etx_sysfs/etx_value) with the reading and writing option. The poll Linux example driver and application supposed to work like below.
+
+Driver Concept
+When you write data using the sysfs entry (/sys/kernel/etx_sysfs/etx_value), that means data is available in the kernel. So, we have to inform the userspace application to read the available data (Driver gives the permission to the app for reading).
+When you read the data using the sysfs entry (/sys/kernel/etx_sysfs/etx_value), that means, data has been read by the kernel, and the userspace app has to write the data into the kernel space. So that driver can read the data. (Driver gives the permission to the app for writing).
+So, whenever the app gets read permission, it can read the data from the driver and whenever the app gets the write permission, it can write some data into the driver.
+Application concept
+The application will open the driver’s device file (/dev/etx_device).
+Then register that descriptor with reading and writing operation using Poll ( 5 Seconds timeout ). So, every 5 seconds it will exit the poll and again it polls.
+If this app gets the read permission from the poll Linux example kernel driver, then it reads the data.
+If this app gets the write permission from the poll Linux example kernel driver, then it writes the data to the driver.
+*******************************************************************************

@@ -1,0 +1,9 @@
+Introduction
+In our last tutorial, we have seen how to write the dummy I2C bus driver in the Linux kernel. It doesn’t send any data to 
+the Salve device. So in this tutorial, we have come up with the real I2C bus Linux device driver. Using this I2C bus driver, 
+we can send data to the slave device. Let’s start.
+
+We have discussed the APIs too in the last tutorials. In this tutorial, we just used a new API called i2c_add_numbered_adapter(). 
+This API will allocate the bus number that we are asking if that is available. In the last tutorial, we have not used this. 
+Instead, we used i2c_add_adapter(). This API will allocate the bus number dynamically.
+*****************************************************************************

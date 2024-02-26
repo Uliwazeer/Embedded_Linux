@@ -1,0 +1,218 @@
+Enable SPI in the Raspberry PI
+In order to write the SPI driver, we have to enable the SPI bus. In this tutorial, we are using SPI 1. To enable SPI 1, please add the below line in the /boot/config.txt.
+
+dtoverlay=spi1-1cs,cs0_spidev=disabled
+The above line enables the SPI 1 and it disables the SPIDev application. So that, we can use the SPI 1 bus. You can refer to this if you have any doubts.
+**********************************************************************
+SPI Device Driver Tutorial
+An SPI – Serial Peripheral Interface protocol is synchronous serial interface technology introduced by Motorola. consists of one master device and one or more slave devices.
+
+SPI needs 4 wires at least. But some of the recent day devices support 3-pin mode and 4-pin modes also.
+
+MOSI – Master Out Slave In
+MISO – Master In Slave Out
+SCLK – Serial Clock
+SS/CS/CE – Salve Select/Chip Select/Chip Enable
+You can read more about SPI Communication.
+
+SPI Subsystem in Linux
+The SPI device driver in Linux is mainly managed by the SPI subsystem, and it is divided into 3 sections.
+
+SPI Core
+SPI Controller Driver
+SPI Protocol Driver
+SPI Core
+The SPI core provides APIs for the definition of core data structures, registration, and cancellation management of SPI controller drivers and device drivers. It is a hardware platform-independent layer, that shields the differences of the physical bus controller downwards and defines a unified access strategy and interface.
+
+It provides a unified interface upwards. So that, the SPI device driver can send and receive data through the SPI bus controller. In the Linux kernel, the SPI core code is located in kernel/drivers/spi/spi.c.
+
+SPI Controller Driver
+The SPI Controller driver is the platform-specific driver. So, each SoC manufacturer has to write this driver for their platform or MCU. controllers These SPI controller drivers may be built into System-On-Chip processors, and often support both Master and Slave roles.
+
+These drivers touch hardware registers and may use DMA or they can be GPIO bit bangers, needing just GPIO pins. Its responsibility is to implement a corresponding read-and-write method for each SPI bus in the system.
+
+Physically, each SPI controller can connect several SPI slave devices. When the system is turned on, the SPI controller driver is loaded first. A controller driver is used to support the reading and writing of a specific SPI bus. So, this SPI controller driver is similar to the adapter/bus driver in the I2C.
+
+You can see all the SPI controller drivers in kernel/drivers/spi/.
+
+We will see how to write the SPI controller driver in our next tutorial.
+
+SPI Protocol Driver
+Each SPI bus controller may connect to multiple slave devices. This driver is used to communicate to specific devices through the SPI bus. This is similar to the I2C client driver.
+
+In this tutorial, we will just focus on the SPI protocol driver.
+
+SPI Protocol Driver in Linux Kernel
+Steps that involve writing the SPI protocol device driver are given below.
+
+Get the SPI Controller driver
+Add the slave device to the SPI Controller
+Configure the SPI
+Now the driver is ready. So you can transfer the data between master and slave.
+Once you are done, then remove the device.
+1. Get the SPI Controller driver
+First, you need to get the controller driver. To do that, you can use the below API. Before using that API, you need to know which SPI bus you are using. In this example, I am using the SPI Bus 1.
+
+struct spi_controller * spi_busnum_to_master(u16 bus_num)
+
+where,
+
+bus_num – the master’s bus number
+
+Return
+
+It returns a pointer to the relevant spi_controller (which the caller must release), or NULL if there is no such master registered.
+
+Example:
+struct  spi_master *master;
+master = spi_busnum_to_master( 1 );
+2. Add the slave device to the SPI Controller
+In this step, you need to create a spi_board_info structure that has the slave device’s details.
+
+struct spi_board_info {
+  char modalias[SPI_NAME_SIZE];
+  const void      *platform_data;
+  const struct property_entry *properties;
+  void *controller_data;
+  int irq;
+  u32 max_speed_hz;
+  u16 bus_num;
+  u16 chip_select;
+  u32 mode;
+};
+where,
+
+modalias – This string is used to identify the driver.
+
+platform_data – the particular data stored there is driver-specific.
+
+properties – Additional device properties for the device.
+
+controller_data – some controllers need hints about hardware setup, e.g. for DMA.
+
+irq – Interrupt number
+
+max_speed_hz – Maximum speed that slave supports. Refer to the slave’s datasheet.
+
+bus_num– SPI bus number that slave is going to connect.
+
+chip_select – Chip select that you want to use.
+
+mode – SPI mode. Refer to the slave’s datasheet.
+
+Once you have filled this structure, then you can use the below API to add the slave device to the SPI controller driver.
+
+struct spi_device * spi_new_device( struct spi_controller *ctlr, struct spi_board_info *chip )
+
+where,
+
+ctlr – Controller to which device is connected. In our case, it has been returned by spi_busnum_to_master().
+
+chip – SPI slave device structure.
+
+Return
+
+It returns the new device, or NULL.
+
+This spi_new_device() is enough as this function handles the spi_alloc_device() and spi_add_device() inside.
+
+Example:
+struct spi_board_info etx_spi_device_info = 
+{
+  .modalias     = "etx-spi-ssd1306-driver",
+  .max_speed_hz = 4000000,              // speed your device (slave) can handle
+  .bus_num      = SPI_BUS_NUM,          // SPI 1
+  .chip_select  = 0,                    // Use 0 Chip select (GPIO 18)
+  .mode         = SPI_MODE_0            // SPI mode 0
+};
+static struct spi_device *etx_spi_device;
+etx_spi_device = spi_new_device( master, &etx_spi_device_info );
+if( etx_spi_device == NULL ) 
+{
+  pr_err("FAILED to create slave.\n");
+  return -ENODEV;
+}
+*********************************************************************************************
+3. Configure the SPI
+Till now, we have added the slave device to the controller driver. If we change any mode or clock frequency, then we have to call this below API to take effect on the bus.
+
+int spi_setup(struct spi_device *spi)
+
+where,
+
+spi – the device whose settings are being modified.
+
+Return
+
+It returns zero on success, or else a negative error code.
+
+4. Message Transfer
+We have done with our initialization. Now we can transfer the data using the below APIs.
+
+This function will be blocked until the master completes the transfer.
+
+int spi_sync_transfer(struct spi_device *spi, struct spi_transfer *xfers, unsigned int num_xfers)
+
+where,
+
+spi – a device with which data will be exchanged.
+
+xfers – An array of spi_transfers.
+
+num_xfers – Number of items in the xfer array.
+
+Return
+
+It returns zero on success, or else a negative error code.
+
+This API is used to transfer the data asynchronously. This call may be used in_irq and other contexts which can’t sleep,
+
+int spi_async(struct spi_device *spi, struct spi_message *message)
+
+where,
+
+spi – a device with which data will be exchanged.
+
+message – describes the data transfers, including completion callback.
+
+Return
+
+It returns zero on success, or else a negative error code.
+
+This API is used to write the data and is followed by a read. This is synchronous.
+
+int spi_write_then_read(struct spi_device * spi, const void * txbuf, unsigned n_tx, void * rxbuf, unsigned n_rx)
+
+where,
+
+spi – a device with which data will be exchanged.
+
+txbuf – data to be written.
+
+n_tx – size of txbuf (in bytes).
+
+rxbuf – the buffer into which data will be read.
+
+n_rx – size of rxbuf (in bytes).
+
+Like these, there are many other APIs also available. Please refer to the spi.c file.
+
+5. Remove the device
+Using the below API, you can unregister the slave device.
+
+void spi_unregister_device(struct spi_device *spi)
+
+where,
+
+spi – a device that needs to be removed.
+
+Example:
+static void __exit etx_spi_exit(void)
+{ 
+  if( etx_spi_device )
+  {
+    spi_unregister_device( etx_spi_device );    // Unregister the SPI slave
+    pr_info("SPI driver Unregistered\n");
+  }
+}
+********************************************************************************************

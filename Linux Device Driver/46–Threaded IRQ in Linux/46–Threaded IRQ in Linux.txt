@@ -1,0 +1,67 @@
+Bottom Half
+When Interrupt triggers, the Interrupt handler should be executed very quickly and it should not run for more time (it should not perform time-consuming tasks). If we have the interrupt handler who is doing more tasks then we need to divide it into two halves.
+
+Top Half
+Bottom Half
+The top Half is nothing but our interrupt handler. If we want to do less work, then the top half is more than enough. No need for the bottom half in that situation. But if we have more work when interrupt hits, then we need the bottom half. The bottom half runs in the future, at a more convenient time, with all interrupts enabled. So, The job of the bottom halves is to perform any interrupt-related work not performed by the interrupt handler.
+
+There are 4 bottom half mechanisms are available in Linux:
+
+Workqueue – Executed in a process context.
+Threaded IRQs
+Softirqs – Executed in an atomic context.
+Tasklets – Executed in an atomic context.
+In this tutorial, we will discuss threaded IRQ in Linux Kernel.
+
+Threaded IRQ in Linux Kernel
+If you see in our previous tutorials where we discussed bottom halves (Workqueue, softirq, Tasklets), we have to register those bottom half and ask the kernel to call those bottom half handler functions. To simplify the process more, Linux has introduced the threaded IRQ. Using this feature, Linux is like, you just give me the handler functions (both top half and bottom half), and I will call those functions at a right time. So, with this threaded IRQ, registering the interrupt handler is a bit simplified and we need not even have to schedule the bottom half ourselves. The core does this for us.
+
+The main aim of the threaded IRQ is to reduce the time spent with interrupts being disabled and that will increase the chances of handling other interrupts. How we are achieving this? If we want to know this, we have to know what we are doing in the interrupt handler normally. Once the interrupt hits, we will disable the all interrupts and process our data or do something. Once we process that, then re-enable the interrupts. In this case, if we take more time to process in the ISR, then we might miss the other interrupts as we have disabled the interrupts in the ISR.
+
+To eliminate this, we just do a very important process in the ISR (which takes less than 100us) and deferred other stuff to the thread function. In this case, interrupts have not been disabled for more time.  So, we will respond to other interrupts too.
+
+Threaded IRQ API
+We have to use the request_threaded_irq instead of request_irq and pass two handlers to that API.
+
+int request_threaded_irq( unsigned int irq,
+                          irq_handler_t handler,
+                          irq_handler_t thread_fn,
+                          unsigned long irqflags,
+                          const char *devname,
+                          void *dev_id
+                        );
+
+Where,
+
+irq:
+
+Interrupt line or IRQ number to allocate.
+
+handler:
+
+This is the primary handler for threaded interrupts. This function will be invoked whenever the operating system receives the interrupt. The data type of return is irq_handler_t, if its return value is IRQ_HANDLED, it indicates that the processing is completed successfully, but if the return value is IRQ_NONE, the processing fails. If it returns IRQ_WAKE_THREAD, then the kernel calls the thread_fn.  If this handler is NULL and thread_fn != NULL the default primary handler (irq_default_primary_handler) is used.
+
+thread_fn:
+
+A function called from the irq handler. If NULL, no IRQ thread is created. This represents the bottom half. When the handler function returns IRQ_WAKE_THREAD, the kthread associated with this bottom half will be scheduled and thread_fn will be called. The thread_fn function must return IRQ_HANDLED when complete. After being executed, the kthread will not be rescheduled again until the IRQ is triggered again and the handler returns IRQ_WAKE_THREAD.
+
+irqflags:
+
+can be either zero or a bitmask of one or more of the flags defined in linux/interrupt.h. The most important of these flags are: IRQF_DISABLED, IRQF_SAMPLE_RANDOM, IRQF_SHARED, IRQF_TIMER, IRQF_TRIGGER_RISING etc.
+
+devname:
+
+Used to identify the device name using this IRQ, for example, cat /proc/interrupts will list the IRQ number and device name.
+
+dev_id:
+
+IRQ shared by many devices. When an interrupt handler is freed, the dev provides a unique cookie to enable the removal of only the desired interrupt handler from the interrupt line. Without this parameter, it would be impossible for the kernel to know which handler to remove on a given interrupt line. You can pass NULL here if the line is not shared, but you must pass a unique cookie if your interrupt line is shared. This pointer is also passed into the interrupt handler on each invocation. A common practice is to pass the driver’s device structure. This pointer is unique and might be useful to have within the handlers.
+
+Return
+returns zero on success and a nonzero value indicate an error.
+******************************************************************************************
+What if a threaded IRQ handler takes more time?
+Okay, I can hear you guys. Some will ask, what if threaded IRQ handler (thread_fn) takes more time when ISR handler takes less time? In that case, we don’t miss the interrupts. But we miss the threaded IRQ function (thread_fn). Confusion? Let’s see this by using an example.
+
+I have two interrupts (UART, and GPIO) being enabled. I have used threaded IRQ for UART interrupt. So, we will be having one UART ISR handler and a UART thread handler(thread_fn). Once we receive some data from the UART, UART ISR will be triggered. Then kernel calls the UART thread handler(thread_fn). If we take more time to process the data in the UART thread handler(thread_fn) (basically when (thread_fn) takes more time), Core can able to receive the other interrupts like GPIO as the interrupts are not disabled. It will process that. But if it receives the same UART interrupt, the UART ISR will be called but the UART thread handler (thread_fn) may not be called as the UART thread handler is still processing the old received data.
+******************************************************************************************

@@ -1,0 +1,130 @@
+In our previous (static workqueue, Dynamic workqueue) tutorials we haven’t created any of the workqueue. We were just used the global workqueue and 
+creating work and scheduling that work to the global workqueue. Now we are going to create our own Workqueue in Linux Device Driver. Let’s get into the tutorial.
+
+The core workqueue is represented by structure struct workqueue_struct, which is the structure onto which work is placed. This work is added to the queue in the top half (Interrupt context) and the execution of this work happened in the bottom half (Kernel context).
+The work is represented by structure struct work_struct, which identifies the work and the deferral function.
+**************************************************************************
+Create and destroy workqueue structure
+Workqueues are created through a macro called create_workqueue, which returns a workqueue_struct reference. 
+You can remove this workqueue later (if needed) through a call to the destroy_workqueue function.
+
+struct workqueue_struct *create_workqueue( name );
+
+void destroy_workqueue( struct workqueue_struct * );
+
+You should use create_singlethread_workqueue() for creating a workqueue when you want to create only a single thread for all the processors.
+
+Since create_workqueue and create_singlethread_workqueue() are macros. Both are using the alloc_workqueue function in the background.
+
+#define create_workqueue(name)                    
+        alloc_workqueue("%s", WQ_MEM_RECLAIM, 1, (name))
+#define create_singlethread_workqueue(name)       
+        alloc_workqueue("%s", WQ_UNBOUND | WQ_MEM_RECLAIM, 1, (name))
+**************************************************************************
+alloc_workqueue
+Allocate a workqueue with the specified parameters.
+
+alloc_workqueue ( fmt, flags, max_active );
+
+fmt– printf format for the name of the workqueue
+**************************************************************************
+flags – WQ_* flags
+
+max_active – max in-flight work items, 0 for default
+
+This will return Pointer to the allocated workqueue on success, NULL on failure.
+
+WQ_* flags
+This is the second argument of alloc_workqueue.
+**************************************************************************
+WQ_UNBOUND
+
+Work items queued to an unbound wq are served by the special worker-pools which host workers who are not bound to any specific CPU. 
+This makes the wq behave like a simple execution context provider without concurrency management. The unbound worker-pools try to 
+start the execution of work items as soon as possible. Unbound wq sacrifices locality but is useful for the following cases.
+
+Wide fluctuation in the concurrency level requirement is expected and using bound wq may end up creating a large number of mostly 
+unused workers across different CPUs as the issuer hops through different CPUs.
+Long-running CPU-intensive workloads which can be better managed by the system scheduler.
+**************************************************************************
+WQ_FREEZABLE
+
+A freezable wq participates in the freeze phase of the system suspend operations. Work items on the wq are drained and no new work 
+item starts execution until thawed.
+**************************************************************************
+WQ_MEM_RECLAIM
+
+All wq which might be used in the memory reclaim paths MUST have this flag set. The wq is guaranteed to have at least 
+one execution context regardless of memory pressure.
+**************************************************************************
+WQ_HIGHPRI
+
+Work items of a highpri wq are queued to the highpri worker-pool of the target CPU. Highpri worker-pools are served by worker threads with elevated nice levels.
+
+Note that normal and highpri worker-pools don’t interact with each other. Each maintains its separate pool of workers 
+and implements concurrency management among its workers.
+**************************************************************************
+WQ_CPU_INTENSIVE
+
+Work items of a CPU intensive wq do not contribute to the concurrency level. In other words, runnable CPU-intensive work items will not prevent 
+other work items in the same worker pool from starting execution. This is useful for bound work items that are expected to hog CPU cycles so that 
+their execution is regulated by the system scheduler.
+
+Although CPU-intensive work items don’t contribute to the concurrency level, the start of their executions is still regulated by the concurrency 
+management and runnable non-CPU-intensive work items can delay the execution of CPU-intensive work items.
+
+This flag is meaningless for unbound wq.
+**************************************************************************
+queue_work
+This will queue the work to the CPU on which it was submitted, but if the CPU dies it can be processed by another CPU.
+int queue_work( struct workqueue_struct *wq, struct work_struct *work );
+
+Where,
+
+wq – workqueue to use
+
+work – work to queue
+
+It returns false if work was already on a queue, true otherwise.
+
+queue_work_on
+This puts work on a specific CPU.
+int queue_work_on( int cpu, struct workqueue_struct *wq, struct work_struct *work );
+
+Where,
+
+cpu– cpu to put the work task on
+
+wq – workqueue to use
+
+work– job to be done
+
+queue_delayed_work
+After waiting for a given time this function puts work in the workqueue.
+
+int queue_delayed_work( struct workqueue_struct *wq,struct delayed_work *dwork, unsigned long delay );
+Where,
+wq – workqueue to use
+
+dwork – work to queue
+
+delay– number of jiffies to wait before queueing or 0 for immediate execution
+
+queue_delayed_work_on
+After waiting for a given time this puts a job in the workqueue on the specified CPU.
+int queue_delayed_work_on( int cpu, struct workqueue_struct *wq,struct delayed_work *dwork, unsigned long delay );
+Where,
+cpu– CPU to put the work task on
+
+wq – workqueue to use
+
+dwork – work to queue
+
+delay– number of jiffies to wait before queueing or 0 for immediate execution
+**************************************************************************
+Difference between Schedule_work and queue_work
+If you want to use your own dedicated workqueue you should create a workqueue using create_workqueue. 
+At that time you need to put work on your workqueue by using queue_work function.
+If you don’t want to create any own workqueue, you can use kernel global workqueue. In that condition, 
+you can use schedule_work function to put your work to global workqueue.
+**************************************************************************

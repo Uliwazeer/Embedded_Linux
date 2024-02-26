@@ -1,0 +1,134 @@
+Get the adapter that is available using i2c_get_adapter()
+Add the device using i2c_new_device()
+Add the driver to the subsystem using i2c_add_driver()
+Once you have done these steps, then just transfer the data using any transfer API.
+Finally, unregister the device using i2c_unregister_device() and delete the driver from the subsystem using i2c_del_driver().
+Have you ever thought that it is very simple, unlike the I2C Bare-metal coding? Yes, you are correct. It is simple.
+
+But have you ever wondered who is sending the START, STOP, ADDRESS, READ with ACK, READ with NACK, etc.?
+
+The I2C bus driver will do such operations.
+
+So in this tutorial, we will discuss the I2C bus drivers in the Linux kernel.
+
+APIs used for the I2C bus driver
+There are two structures that you need to use in order to write the i2c bus driver in the Linux kernel.
+
+Algorithm Structure
+Adapter Structure
+1. Algorithm Structure
+This structure represents the I2C transfer method.
+
+struct i2c_algorithm {
+  int (* master_xfer) (struct i2c_adapter *adap, struct i2c_msg *msgs,int num);
+  int (* smbus_xfer) (struct i2c_adapter *adap, u16 addr,unsigned short flags, char read_write,u8 command, int size, union i2c_smbus_data *data);
+  u32 (* functionality) (struct i2c_adapter *);
+#if IS_ENABLED(CONFIG_I2C_SLAVE)
+  int (* reg_slave) (struct i2c_client *client);
+  int (* unreg_slave) (struct i2c_client *client);
+#endif
+};
+Where,
+
+master_xfer — Issue a set of i2c transactions to the given I2C adapter defined by the msgs array, with num messages available to transfer via the adapter specified by adap. This function will be called whenever we call I2C read-write APIs from the client driver.
+smbus_xfer — Issue SMBus transactions to the given I2C adapter. If this is not present, then the bus layer will try and convert the SMBus calls into I2C transfers instead. This function will be called whenever we call SMBus read-write APIs from the client driver.
+functionality — Return the flags that this algorithm/adapter pair supports from the I2C_FUNC_* flags.
+reg_slave — Register given client to the I2C slave mode of this adapter
+unreg_slave — Unregister given client from the I2C slave mode of this adapter
+
+The return codes from the master_xfer field should indicate the type of error code that occurred during the transfer, as documented in the kernel Documentation file Documentation/i2c/fault-codes.
+
+2. Adapter Structure
+This structure is used to identify a physical i2c bus along with the access algorithms necessary to access it.
+struct i2c_adapter {
+    struct module *owner;
+    unsigned int class;
+    const struct i2c_algorithm *algo;
+    void *algo_data;
+    struct rt_mutex bus_lock;
+    int timeout;
+    int retries;
+    struct device dev;
+    int nr;
+    char name[48];
+    struct completion dev_released;
+    struct mutex userspace_clients_lock;
+    struct list_head userspace_clients;
+};
+Where,
+
+*owner — Owner of the module(usually set this to THIS_MODULE).
+class — the type of I2C class devices that this driver supports. Usually, this is set to any one of the I2C_CLASS_* based on our needs.
+*algo — a pointer to the struct i2c_algorithm structure
+bus_lock — Mutex lock.
+timeout — Timeout in jiffies.
+retries — Number of retries.
+dev — the adapter device.
+nr — bus number which you want to create. This will be applicable only for i2c_add_numbered_adapter().
+char name[I2C_NAME_SIZE] — I2C bus driver name. This value shows up in the Sysfs filename associated with this I2C adapter.
+
+After you create the two structures, then we have to add the adapter to the i2c subsystem.
+
+Add the adapter to the subsystem
+i2c_add_adapter:
+This API is used to register the adapter to the subsystem. But this will assign the dynamic bus number.
+
+int i2c_add_adapter (struct i2c_adapter * adapter);
+where,
+adapter – the adapter to add
+
+It returns zero when a new bus number was allocated and stored in adap->nr, and the specified adapter became available for clients. Otherwise, a negative errno value is returned
+
+i2c_add_numbered_adapter:
+This API is used to register the adapter to the subsystem. But it assigns the number that we asked for if only it is available. We have to initialize the member called nr in the i2c_adapter structure before calling this.
+
+int i2c_add_numbered_adapter ( struct i2c_adapter * adap);
+
+Where,
+adap – the adapter to register (with adap->nr initialized)
+
+This returns zero when the specified adapter is available for clients using the bus number provided in adap->nr. Otherwise, a negative errno value is returned.
+
+Example:
+/*
+** I2C adapter Structure
+*/
+static struct i2c_adapter etx_i2c_adapter = {
+    .owner  = THIS_MODULE,
+    .class  = I2C_CLASS_HWMON,//| I2C_CLASS_SPD,
+    .algo   = &etx_i2c_algorithm,
+    .name   = ADAPTER_NAME,
+    .nr     = 5,
+};
+/*
+** Module Init function
+*/
+static int __init etx_driver_init(void)
+{
+    int ret = -1;
+    
+    //create bus driver as i2c-5 if it is available
+    ret = i2c_add_numbered_adapter(&etx_i2c_adapter);
+    
+    pr_info("Bus Driver Added!!!\n");
+    return ret;
+}
+If bus number 5 is not used by anyone, then it will assign that bus number to the client. Otherwise, it will return a negative number.
+
+Delete the adapter from the subsystem
+This API is used to unregister the adapter from the subsystem.
+
+void i2c_del_adapter ( struct i2c_adapter * adap);
+
+Where,
+adap – the adapter being unregistered
+**************************************************************************
+Example Programming
+We are going to write the I2C bus driver which does nothing. I meant it won’t send any START, STOP, ADDRESS, READ with ACK, READ with NACK, etc.
+
+It won’t communicate with the slave device. The i2c bus driver just prints the message that it gets instead.
+
+Actually, it is a dummy I2C bus driver. What is the use of this dummy I2C bus driver? This will give you some basic ideas about how it is working.
+
+What if you call i2c_master_send(), i2c_master_recv() and any SMBUS API like i2c_smbus_read_byte() from the I2C Client Device driver? So this example will give you an overview.
+***************************************************************************

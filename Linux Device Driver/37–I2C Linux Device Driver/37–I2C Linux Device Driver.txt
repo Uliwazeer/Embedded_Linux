@@ -1,0 +1,359 @@
+I2C
+I assume that you know about the I2C and how the master and slave are communicating normally. If you don’t know about I2C,
+please go through the I2C’s part 1 and part 2 tutorials before beginning. In this tutorial, we will focus on how the Linux kernel is handling the I2C.
+
+I2C Subsystem
+The kernel divided the I2C subsystem by Buses and Devices. The Buses are again divided into Algorithms and Adapters. The devices are again divided into Drivers and Clients. The below image will give you some understandings.
+**************************************************************************
+Algorithm
+An Algorithm driver contains a general code that can be used for a whole class of I2C adapters.
+
+Adapters
+An Adapter effectively represents a bus – it is used to tie up a particular I2C with an algorithm and bus number. Each specific adapter driver either depends on one algorithm driver or includes its own implementation.
+
+Clients
+A Client represents a chip (slave) on the I2C.
+
+Drivers
+This is the driver that we are writing for the client.
+
+Usually, Driver and Client are more closely integrated than Algorithm and Adapter.
+
+So, you will need a driver for your I2C bus, and drivers for your I2C devices (usually one driver for each device).
+**************************************************************************\
+Get the I2C adapter
+In raspberry Pi 4, the i2c-1 bus is available already. You can check that using the command ls -al /sys/bus/i2c/devices/. So we will use the below API to get the adapter structure of this I2C bus.
+
+struct i2c_adapter *i2c_get_adapter(int nr);
+
+Where,
+
+nr – I2C bus number. In our case (Raspberry Pi 4), it should be 1.
+
+It returns the struct i2c_adapter.
+
+Create the board info
+Once you get the adapter structure, then create the board info and using that board info, create the device.
+
+Create Board info
+Just create the i2c_board_info  structure and assign required members of that.
+
+struct i2c_board_info {
+  char type[I2C_NAME_SIZE];
+  unsigned short flags;
+  unsigned short addr;
+  void * platform_data;
+  struct dev_archdata * archdata;
+  struct device_node * of_node;
+  struct fwnode_handle * fwnode;
+  int irq;
+};
+where,
+
+type[I2C_NAME_SIZE] – chip type, to initialize i2c_client.name
+flags                             – to initialize i2c_client.flags
+addr                               – stored in i2c_client.addr
+platform_data             – stored in i2c_client.dev.platform_data
+archdata                       – copied into i2c_client.dev.archdata
+of_node                         – pointer to OpenFirmware device node
+fwnode                           – device node supplied by the platform firmware
+irq                                 – stored in i2c_client.irq
+
+You can use I2C_BOARD_INFO macro to initialize the essential fields of struct i2c_board_info.
+
+I2C_BOARD_INFO ( dev_type, dev_addr);
+where,
+
+dev_type – identifies the device type
+
+dev_addr – the device’s address on the bus
+**************************************************************************
+Create Device
+Now board info structure is ready. Let’s instantiate the device from that I2C bus.
+
+struct i2c_client * i2c_new_device ( struct i2c_adapter * adap, struct i2c_board_info const * info);
+
+where,
+
+*adap – Adapter structure that we got from i2c_get_adapter()
+
+*info – Board info structure that we have created
+
+This will return the i2c_client structure. We can use this client for our future transfers.
+
+Note: If you are using the newer kernel (5.2 =<), then you must use the i2c_new_client_device API instead of i2c_new_device.
+
+Now we will see the example for this section. So that you will get some idea that how we are using this in our code.
+
+Example
+#define I2C_BUS_AVAILABLE   (          1 )              // I2C Bus available in our Raspberry Pi
+#define SLAVE_DEVICE_NAME   ( "ETX_OLED" )              // Device and Driver Name
+#define SSD1306_SLAVE_ADDR  (       0x3C )              // SSD1306 OLED Slave Address
+static struct i2c_adapter *etx_i2c_adapter     = NULL;  // I2C Adapter Structure
+static struct i2c_client  *etx_i2c_client_oled = NULL;  // I2C Cient Structure (In our case it is OLED)
+/*
+** I2C Board Info strucutre
+*/
+static struct i2c_board_info oled_i2c_board_info = {
+        I2C_BOARD_INFO(SLAVE_DEVICE_NAME, SSD1306_SLAVE_ADDR)
+    };
+/*
+** Module Init function
+*/
+static int __init etx_driver_init(void)
+{
+    ....
+    
+    etx_i2c_adapter     = i2c_get_adapter(I2C_BUS_AVAILABLE);
+    etx_i2c_client_oled = i2c_new_device(etx_i2c_adapter, &oled_i2c_board_info);
+    
+    ....
+    return 0;
+}
+******************************************************************************
+Create the device id and register
+Now we have to create the i2c driver for our slave. In order to do that, you have to create the device id and i2c_driver. Then add that driver to the I2C subsystem.
+
+Create the device id
+Just create the structure i2c_device_id and initialize the necessary members.
+
+struct i2c_device_id {
+  char name[I2C_NAME_SIZE];
+  kernel_ulong_t driver_data;
+};
+where,
+
+name               –  Slave name
+driver_data – Data private to the driver (This data will be passed to the respective driver)
+
+After this, call MODULE_DEVICE_TABLE(i2c, my_id_table) in order to expose the driver along with its I2C device table IDs to userspace.
+
+Create the i2c_driver
+struct i2c_driver {
+  unsigned int class;
+  int (* attach_adapter) (struct i2c_adapter *);
+  int (* probe) (struct i2c_client *, const struct i2c_device_id *);
+  int (* remove) (struct i2c_client *);
+  void (* shutdown) (struct i2c_client *);
+  void (* alert) (struct i2c_client *, unsigned int data);
+  int (* command) (struct i2c_client *client, unsigned int cmd, void *arg);
+  struct device_driver driver;
+  const struct i2c_device_id * id_table;
+  int (* detect) (struct i2c_client *, struct i2c_board_info *);
+  const unsigned short * address_list;
+  struct list_head clients;
+};
+Where,
+
+class                   – What kind of i2c device we instantiate (for detect)
+attach_adapter – Callback for bus addition (deprecated)
+probe                   – Callback for device binding
+remove                 – Callback for device unbinding
+shutdown             – Callback for device shutdown
+alert                   – Alert callback, for example for the SMBus alert protocol
+command               – Callback for bus-wide signaling (optional)
+driver                 – Device driver model driver
+id_table             – List of I2C devices supported by this driver
+detect                 – Callback for device detection
+address_list     – The I2C addresses to probe (for detect)
+clients               – List of detected clients we created (for i2c-core use only)
+**************************************************************************
+Add the I2C driver to the I2C subsystem
+Now we have the i2c_driver structure. So we can add this structure to the I2C subsystem using the below API.
+
+i2c_add_driver(struct i2c_driver *i2c_drive);
+
+Where,
+
+i2c_drive – The i2c_driver structure that we have created.
+
+During the call to i2c_add_driver to register the I2C driver, all the I2C devices will be traversed. Once matched, the probe function of the driver will be executed.
+
+You can remove the driver using i2c_del_driver(struct i2c_driver *i2c_drive).
+
+Let’s put this together and the code snippet is shown below.
+
+Example
+/*
+** This function getting called when the slave has been found
+** Note : This will be called only once when we load the driver.
+*/
+static int etx_oled_probe(struct i2c_client *client,
+                         const struct i2c_device_id *id)
+{
+    ...
+    
+    return 0;
+}
+/*
+** This function getting called when the slave has been removed
+** Note : This will be called only once when we unload the driver.
+*/
+static int etx_oled_remove(struct i2c_client *client)
+{   
+    ...
+    return 0;
+}
+/*
+** Structure that has slave device id
+*/
+static const struct i2c_device_id etx_oled_id[] = {
+        { SLAVE_DEVICE_NAME, 0 },
+        { }
+};
+MODULE_DEVICE_TABLE(i2c, etx_oled_id);
+/*
+** I2C driver Structure that has to be added to linux
+*/
+static struct i2c_driver etx_oled_driver = {
+        .driver = {
+            .name   = SLAVE_DEVICE_NAME,
+            .owner  = THIS_MODULE,
+        },
+        .probe          = etx_oled_probe,
+        .remove         = etx_oled_remove,
+        .id_table       = etx_oled_id,
+};
+/*
+** Module Init function
+*/
+static int __init etx_driver_init(void)
+{
+    ...
+    i2c_add_driver(&etx_oled_driver);
+    ...
+    return 0;
+}
+***********************************************************************************************
+Transfer data
+Till this point, everything is on our plate. So, we can start the communication between master and slave. I meant data transfer.
+
+Send data
+i2c_master_send
+This API issue a single I2C message in the master transmit mode.
+
+int i2c_master_send ( const struct i2c_client * client, const char * buf, int count);
+
+Where,
+
+client – Handle to the slave device
+buf       – Data that will be written to the slave
+count   – How many bytes to write, must be less than 64k since msg length is u16
+
+It returns negative errno, or else the number of bytes written.
+
+i2c_smbus_write_byte
+This API is used to send one byte to the slave.
+
+s32 i2c_smbus_write_byte ( const struct i2c_client * client, u8 value);
+
+Where,
+
+client – Handle to the slave device
+value   – Byte to be sent
+
+It returning negative errno else zero on success.
+
+i2c_smbus_write_byte_data
+s32 i2c_smbus_write_byte_data ( const struct i2c_client * client, u8 command, u8 value);
+
+Where,
+
+client   – Handle to the slave device
+command – Byte interpreted by slave
+value     – Byte being written
+
+It returning negative errno else zero on success.
+
+i2c_smbus_write_word_data
+s32 i2c_smbus_write_word_data ( const struct i2c_client * client, u8 command, u16 value);
+
+Where,
+
+client   – Handle to the slave device
+command – Byte interpreted by slave
+value     – 16-bit “word” being written
+
+It returning negative errno else zero on success.
+
+i2c_smbus_write_block_data
+s32 i2c_smbus_write_block_data ( const struct i2c_client * client, u8 command, u8 length, const u8 * values);
+
+Where,
+
+client   – Handle to the slave device
+command – Byte interpreted by slave
+length   – Size of the data block; SMBus allows at most 32 bytes
+values   – Byte array which will be written
+
+It returns negative errno else zero on success.
+
+Read data
+i2c_master_recv
+This API issue a single I2C message in master receive mode.
+
+int i2c_master_recv ( const struct i2c_client * client, const char * buf, int count);
+
+Where,
+
+client – Handle to the slave device
+buf       – Data that will be read from the slave
+count   – How many bytes to read, must be less than 64k since msg length is u16
+
+It returns negative errno, or else the number of bytes reads.
+
+i2c_smbus_read_byte
+s32 i2c_smbus_read_byte ( const struct i2c_client * client);
+
+Where,
+client  – Handle to the slave device
+
+It is returning negative errno else the byte received from the device.
+
+i2c_smbus_read_byte_data
+s32 i2c_smbus_read_byte_data ( const struct i2c_client * client, u8 command);
+
+Where,
+
+client   – Handle to the slave device
+command – Byte interpreted by slave
+
+It is returning negative errno else a data byte received from the device.
+
+i2c_smbus_read_word_data
+s32 i2c_smbus_read_word_data ( const struct i2c_client * client, u8 command);
+
+Where,
+
+client   – Handle to the slave device
+command – Byte interpreted by slave
+
+This returns negative errno else a 16-bit unsigned “word” received from the device.
+
+i2c_smbus_read_block_data
+s32 i2c_smbus_read_block_data ( const struct i2c_client * client, u8 command, u8 * values);
+
+Where,
+
+client   – Handle to the slave device
+command – Byte interpreted by slave
+values   – Byte array into which data will be read; big enough to hold the data returned by the slave. SMBus allows at most 32 bytes.
+
+This returns negative errno else the number of data bytes in the slave’s response.
+
+Note that using this function requires that the client’s adapter support the I2C_FUNC_SMBUS_READ_BLOCK_DATA functionality. Not all adapter drivers support this; its emulation through I2C messaging relies on a specific mechanism (I2C_M_RECV_LEN) which may not be implemented.
+
+i2c_transfer
+If you want to send multiple I2C messages then you can use the below-given API.
+
+int i2c_transfer ( struct i2c_adapter * adap, struct i2c_msg * msgs, int num);
+
+Where,
+
+adap – Handle to the I2C bus
+msgs – One or more messages to execute before STOP is issued to terminate the operation; each message begins with a START.
+num   – Number of messages to be executed.
+
+It returns negative errno, else the number of messages executed.
+**************************************************************************
+

@@ -1,0 +1,75 @@
+Generally, A signal is an action that is intended to send a particular message. It can be sound, gesture, event, etc. Below are the normal signals which we are using the day to day life.
+
+When we take money in ATM, we will get a message (SMS).
+Calling someone by making a sound or gesture.
+Microwave oven making a sound when it finishes its job.
+etc.
+What about the signal in Linux? Signals are a way of sending simple messages which are used to notify a process or thread of a particular event. In Linux, there are many processes that will be running at a time. We can send a signal from one process to another process. Signals are one of the oldest inter-process communication methods. These signals are asynchronous. Like User space signals, can we send a signal to userspace from kernel space? Yes, why not. We will see the complete Signals in upcoming tutorials. In this tutorial, we will learn how to send a signal from Linux Device Driver to User Space.
+
+Sending Signal from Linux Device Driver to User Space
+Using the following steps easily we can send the signals.
+
+Decide the signal that you want to send.
+Register the user space application with the driver.
+Once something happened (in our example we used interrupts) send signals to userspace.
+Unregister the user space application when you have done with it.
+Decide the signal that you want to send
+First, select the signal number which you want to send. In our case, we are going to send signal 44.
+
+Example:
+
+#define SIGETX    44
+Register the user space application with the driver
+Before sending the signal, your device driver should know to whom it needs to send the signal. For that, we need to register the process to the driver. So we need to send the PID to the driver first. Then that driver will use the PID and sends the signal. You can register the application PID in anyways like IOCTL, Open/read/write call. In our example, we are going to register using IOCTL.
+
+Example:
+
+static long etx_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+    if (cmd == REG_CURRENT_TASK) {
+        printk(KERN_INFO "REG_CURRENT_TASK\n");
+        task = get_current();
+        signum = SIGETX;
+    }
+    return 0;
+}
+Send signals to user space
+After registering the application to the driver, the driver can able to send the signal when it wants to. In our example, we will send the signal when we get the interrupt.
+
+Example:
+
+//Interrupt handler for IRQ 11. 
+static irqreturn_t irq_handler(int irq,void *dev_id) {
+    struct siginfo info;
+    printk(KERN_INFO "Shared IRQ: Interrupt Occurred");
+    
+    //Sending signal to app
+    memset(&info, 0, sizeof(struct siginfo));
+    info.si_signo = SIGETX;
+    info.si_code = SI_QUEUE;
+    info.si_int = 1;
+    if (task != NULL) {
+        printk(KERN_INFO "Sending signal to app\n");
+        if(send_sig_info(SIGETX, &info, task) < 0) {
+            printk(KERN_INFO "Unable to send signal\n");
+        }
+    }
+    return IRQ_HANDLED;
+}
+Unregister the user space application
+When you are done with your task, you can unregister your application. Here we are unregistering when that application closes the driver.
+
+Example:
+
+static int etx_release(struct inode *inode, struct file *file)
+{
+    struct task_struct *ref_task = get_current();
+    printk(KERN_INFO "Device File Closed...!!!\n");
+    
+    //delete the task
+    if(ref_task == task) {
+        task = NULL;
+    }
+    return 0;
+}
+**************************************************************************

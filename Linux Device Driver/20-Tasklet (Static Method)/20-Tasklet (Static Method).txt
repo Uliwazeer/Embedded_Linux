@@ -1,0 +1,170 @@
+Bottom Half
+When Interrupt triggers, Interrupt Handler should be executed very quickly and it should not run for more time (it should not perform time-consuming tasks). If we have the interrupt handler who is doing more tasks then we need to divide it into two halves.
+
+Top Half
+Bottom Half
+**************************************************************************
+The top Half is nothing but our interrupt handler. If we want to do less work, then the top half is more than enough. 
+No need for the bottom half in that situation. But if we have more work when interrupt hits, then we need the bottom half.
+The bottom half runs in the future, at a more convenient time, with all interrupts enabled. So, The job of the bottom halves 
+is to perform any interrupt-related work not performed by the interrupt handler.
+**************************************************************************
+There are 4 bottom half mechanisms are available in Linux:
+
+1-Workqueue – Executed in a process context.
+2-Threaded IRQs
+3-Softirqs – Executed in an atomic context.
+4-Tasklet in Linux – Executed in an atomic context.
+**************************************************************************
+Tasklet in Linux Kernel
+Tasklets are used to queue up work to be done at a later time. Tasklets can be run in parallel, but the same tasklet cannot 
+be run on multiple CPUs at the same time. Also, each tasklet will run only on the CPU that schedules it, to optimize cache 
+usage. Since the thread that queued up the tasklet must complete before it can run the tasklet, race conditions are naturally 
+avoided. However, this arrangement can be suboptimal, as other potentially idle CPUs cannot be used to run the tasklet. Therefore 
+workqueues can and should be used instead.
+
+In short, a tasklet in linux is something like a very small thread that has neither stack nor context of its own. Such “threads” work quickly and completely.
+**************************************************************************
+Before using Tasklets, you should consider the below points.
+
+Tasklets are atomic, so we cannot use sleep() and such synchronization primitives as mutexes, semaphores, etc. from them. But we can use spinlock.
+A tasklet only runs on the same core (CPU) that schedules it.
+Different tasklets can be running in parallel. But at the same time, a tasklet cannot be called concurrently with itself, as it runs on one CPU only.
+Tasklets are executed by the principle of non-preemptive scheduling, one by one, in turn. We can schedule them with two different priorities: normal and high.
+**************************************************************************
+We can create a tasklet in Two ways.
+
+Static Method
+Dynamic Method
+**************************************************************************
+TASKLET STRUCTURES
+
+struct tasklet_struct
+{
+    struct tasklet_struct *next;  
+    unsigned long state;         
+    atomic_t count;               
+    void (*func)(unsigned long); 
+    unsigned long data;           
+};
+next – The next tasklet in line for scheduling.
+
+state – This state denotes Tasklet’s State. TASKLET_STATE_SCHED (Scheduled) or TASKLET_STATE_RUN (Running).
+
+count – It holds a nonzero value if the tasklet is disabled and 0 if it is enabled.
+
+func –  This is the main function of the tasklet. Pointer to the function that needs to schedule for execution at a later time.
+
+data –  Data to be passed to the function “func“.
+**************************************************************************
+DECLARE_TASKLET
+This macro used to create the tasklet structure and assigns the parameters to that structure.
+
+If we are using this macro then the tasklet will be in the enabled state.
+
+DECLARE_TASKLET(name, func, data);
+
+name – name of the structure to be created.
+
+func – This is the main function of the tasklet. Pointer to the function that needs to schedule for execution at a later time.
+
+data – Data to be passed to the function “func“.
+
+DECLARE_TASKLET(tasklet,tasklet_fn, 1);
+
+struct tasklet_struct tasklet = { NULL, 0, 0, tasklet_fn, 1 };
+
+                      (or)
+
+struct tasklet_struct tasklet;
+tasklet.next = NULL;
+taklet.state = TASKLET_STATE_SCHED;  //Tasklet state is scheduled
+tasklet.count = 0;                   //taskelet enabled
+tasklet.func = tasklet_fn;           //function
+tasklet.data = 1;                    //data arg
+**************************************************************************
+DECLARE_TASKLET_DISABLED
+The tasklet can be declared and set at a disabled state, which means that the tasklet can be scheduled, but will not 
+run until the tasklet is specifically enabled. You need to use tasklet_enable to enable.
+DECLARE_TASKLET_DISABLED(name, func, data);
+
+name – name of the structure to be created.
+
+func – This is the main function of the tasklet. Pointer to the function that needs to schedule for execution at a later time.
+
+data – Data to be passed to the function “func“.
+**************************************************************************
+Enable and Disable Tasklet
+tasklet_enable
+This used to enable the tasklet.
+void tasklet_enable(struct);
+
+t – pointer to the tasklet struct
+
+tasklet_disable
+This used to disable the tasklet wait for the completion of the tasklet’s operation.
+void tasklet_disable(struct tasklet_struct *t);
+
+t – pointer to the tasklet struct
+
+tasklet_disable_nosync
+This used to disable immediately.
+void tasklet_disable_nosync(struct tasklet_struct *t);
+
+t – pointer to the tasklet struct
+**************************************************************************
+NOTE: If the tasklet has been disabled, we can still add it to the queue for scheduling, but it will not be executed on 
+the CPU until it is enabled again. Moreover, if the tasklet has been disabled several times, it should be enabled exactly 
+the same number of times, there is the count field in the structure for this purpose.
+**************************************************************************
+Schedule the tasklet
+When we schedule the tasklet, then that tasklet is placed into one queue out of two, depending on the priority. Queues are organized as singly-linked lists. At that, each CPU has its own queues.
+
+There are two priorities.
+
+Normal Priority
+High Priority
+tasklet_schedule
+Schedule a tasklet with a normal priority. If a tasklet has previously been scheduled (but not yet run), the new schedule will be silently discarded.
+
+void tasklet_schedule (struct tasklet_struct *t);
+
+t – pointer to the tasklet struct
+
+/*Scheduling Task to Tasklet*/
+tasklet_schedule(&tasklet);
+**************************************************************************
+tasklet_hi_schedule
+Schedule a tasklet with high priority. If a tasklet has previously been scheduled (but not yet run), the new schedule will be silently discarded.
+
+void tasklet_hi_schedule (struct tasklet_struct *t);
+
+t – pointer to the tasklet struct
+
+tasklet_hi_schedule_first
+This version avoids touching any other tasklets. Needed for kmemcheck in order not to take any page faults while enqueueing this tasklet. Consider VERY carefully whether you really need this or tasklet_hi_schedule().
+void tasklet_hi_schedule_first(struct tasklet_struct *t);
+
+t – pointer to the tasklet struct
+
+Kill Tasklet
+Finally, after a tasklet has been created, it’s possible to delete a tasklet through these below functions.
+
+tasklet_kill
+This will wait for its completion and then kill it.
+void tasklet_kill( struct tasklet_struct *t );
+
+t– pointer to the tasklet struct
+
+/*Kill the Tasklet */
+tasklet_kill(&tasklet);
+
+tasklet_kill_immediate
+This is used only when a given CPU is in the dead state.
+
+void tasklet_kill_immediate( struct tasklet_struct *t, unsigned int cpu );
+
+t – pointer to the tasklet struct
+
+cpu – CPU num
+**************************************************************************

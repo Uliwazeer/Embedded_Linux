@@ -1,0 +1,140 @@
+Introduction
+In our last tutorial,  we have implemented everything using Bit banging right from the START condition, STOP condition, Read ACK/NACK, etc. But we have not taken care of advanced I2C operations like arbitration, clock stretching, etc. So even if we implement that we have to test it fully. Maybe our approach will take more time than normal.
+
+So in this tutorial, we are going to use i2c-gpio driver where all the START condition, STOP condition, ACK/NACK, Arbitration, clock stretching, etc are implemented (bit-banging) and it has been tested fully as it is part of the Linux kernel. So we will see how to use that. Let’s get started.
+
+APIs used for the I2C bus driver
+struct i2c_algo_bit_data
+/*
+ * This struct contains the hw-dependent functions of bit-style adapters to
+ * manipulate the line states, and to init any hw-specific features. This is
+ * only used if you have more than one hw-type of adapter running.
+ */
+struct i2c_algo_bit_data {
+    void *data;     /* private data for lowlevel routines */
+    void (*setsda) (void *data, int state);
+    void (*setscl) (void *data, int state);
+    int  (*getsda) (void *data);
+    int  (*getscl) (void *data);
+    int  (*pre_xfer)  (struct i2c_adapter *);
+    void (*post_xfer) (struct i2c_adapter *);
+    /* local settings */
+    int udelay;     /* half clock cycle time in us,
+                   minimum 2 us for fast-mode I2C,
+                   minimum 5 us for standard-mode I2C and SMBus,
+                   maximum 50 us for SMBus */
+    int timeout;        /* in jiffies */
+    bool can_do_atomic; /* callbacks don't sleep, we can be atomic */
+};
+If you see the structure, setscl, getscl, setsda, getsda are present. We have to give our callback function to these members. For example, If the i2c-gpio driver wants to send the START condition, it needs to set the SCL/SDA GPIO to High/Low. But it doesn’t know which GPIO we are using. That’s why they have made this as a callback. See the example code given below to understand more.
+
+data – private data (Optional)
+
+pre_xfer – Function that will be called before i2C-gpio starts the I2C transfer  (Optional)
+
+post_xfer – Function that will be called after i2C-gpio finishes the I2C transfer (Optional)
+
+delay – delay in uS
+
+timout – Timeout in jiffies
+
+can_do_atomic – This will tells callback can sleep or not (Optional)
+
+ Note: When you are using this method, you have to add this structure to the i2c_adapter structure’s algo_data member. Make sure that you have requested the GPIO before accessing it.
+Example
+#define ADAPTER_NAME     "ETX_I2C_ADAPTER"
+#define SCL_GPIO  20    //GPIO act as SCL
+#define SDA_GPIO  21    //GPIO act as SDA
+/*
+** Function to read the SCL GPIO
+*/
+static int ETX_I2C_Read_SCL(void *data)
+{
+  gpio_direction_input(SCL_GPIO);
+  return gpio_get_value(SCL_GPIO);
+}
+/*
+** Function to read the SDA GPIO
+*/
+static int ETX_I2C_Read_SDA(void *data)
+{
+  gpio_direction_input(SDA_GPIO);
+  return gpio_get_value(SDA_GPIO);
+}
+/*
+** Function to set the SCL GPIO
+*/
+static void ETX_I2C_Set_SCL(void *data, int state)
+{
+  gpio_direction_output(SCL_GPIO, state);
+  gpio_set_value(SCL_GPIO, state);
+}
+/*
+** Function to set the SDA GPIO
+*/
+static void ETX_I2C_Set_SDA(void *data, int state)
+{
+  gpio_direction_output(SDA_GPIO, state);
+  gpio_set_value(SDA_GPIO, state);
+}
+/*
+** I2C bit algorithm Structure
+*/
+struct i2c_algo_bit_data etx_bit_data = {
+  .setsda = ETX_I2C_Set_SDA,
+  .setscl = ETX_I2C_Set_SCL,
+  .getscl = ETX_I2C_Read_SCL,
+  .getsda = ETX_I2C_Read_SDA,
+  .udelay = 5,
+  .timeout = 100,       /* 100 ms */
+};
+/*
+** I2C adapter Structure
+*/
+static struct i2c_adapter etx_i2c_adapter = {
+  .owner      = THIS_MODULE,
+  .class      = I2C_CLASS_HWMON | I2C_CLASS_SPD,
+  .name       = ADAPTER_NAME,
+  .algo_data  = &etx_bit_data,
+  .nr         = 5,
+};
+i2c_bit_add_bus
+This API is used to register the adapter to the subsystem. But this will assign the dynamic bus number.
+
+int i2c_bit_add_bus (struct i2c_adapter * adapter);
+
+where,
+adapter – the adapter to add
+
+It returns zero when a new bus number was allocated and stored in adap->nr, and the specified adapter became available for clients. Otherwise, a negative errno value is returned
+
+i2c_bit_add_numbered_bus
+This API is used to register the adapter to the subsystem. But it assigns the number that we asked for if only it is available. We have to initialize the member called nr in the i2c_adapter structure before calling this.
+
+int i2c_bit_add_numbered_bus ( struct i2c_adapter * adap);
+
+Where,
+adap – the adapter to register (with adap->nr initialized)
+
+This returns zero when the specified adapter is available for clients using the bus number provided in adap->nr. Otherwise, a negative errno value is returned.
+
+I think we have discussed other APIs in our previous tutorials. So we can jump into the programming now.
+
+Example Programming
+In this tutorial, we will demonstrate the same example (last tutorial’s) which fills data in the display while loading the module and clears the display while unloading the module. The only difference from the last tutorial is the code that we are using in the bus driver.
+
+Connection Diagram
+SCL – GPIO 20
+SDA – GPIO 21
+****************************************************************************
+Testing the Device Driver
+Build the driver by using Makefile (sudo make) in both bus and client driver directories.
+Before loading the bus driver, we should load the i2c-gpio driver. Use sudo modprobe i2c-gpio to load the i2c-gpio driver.
+Load the bus driver using sudo insmod driver_bus.ko
+Load the client driver using sudo insmod driver_client.ko
+See the Display is filled.
+Unload the driver using sudo rmmod driver_client
+See the Display has been cleared.
+Unload the driver using sudo rmmod driver_bus
+Unload the i2c-gpio using sudo modprobe -r i2c-gpio
+**********************************************************************************

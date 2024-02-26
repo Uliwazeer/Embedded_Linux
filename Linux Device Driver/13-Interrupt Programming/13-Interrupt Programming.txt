@@ -1,0 +1,37 @@
+Interrupt Example Program in Linux Kernel
+Before writing any interrupt program, you should keep the following points in mind.
+
+1-Interrupt handlers can not enter sleep, so to avoid calls to some functions which has sleep.
+2-When the interrupt handler has part of the code to enter the critical section, use spinlocks lock, rather than mutexes. 
+Because if it can’t take mutex it will go to sleep until it takes the mute.
+Interrupt handlers can not exchange data with the userspace.
+3-The interrupt handlers must be executed as soon as possible. To ensure this, it is best to split the implementation into two parts, 
+the top half and the bottom half. The top half of the handler will get the job done as soon as possible and then work late on the bottom half, 
+which can be done with softirq or tasklet or workqueue.
+4-Interrupt handlers can not be called repeatedly. When a handler is already executing, its corresponding IRQ must be disabled until the handler is done.
+5-Interrupt handlers can be interrupted by higher authority handlers. If you want to avoid being interrupted by a highly qualified handler, 
+you can mark the interrupt handler as a fast handler. However, if too many are marked as fast handlers, the performance of the system will be 
+degraded because the interrupt latency will be longer.
+**************************************************************************
+IRQF_TIMER: This flag specifies that this handler process interrupts the system timer.
+IRQF_SHARED: This flag specifies that the interrupt line can be shared among multiple interrupt handlers. 
+Each handler registered on a given line must specify this flag; otherwise, only one handler can exist per line.
+
+REGISTER AN INTERRUPT HANDLER
+#define IRQ_NO 11
+
+if (request_irq(IRQ_NO, irq_handler, IRQF_SHARED, "etx_device", (void *)(irq_handler))) {
+            printk(KERN_INFO "my_device: cannot register IRQ ");
+            goto irq;
+}
+
+FREEEING AN INTERRUPT HANDLER
+free_irq(IRQ_NO,(void *)(irq_handler));
+
+INTERRUPT HANDLER
+static irqreturn_t irq_handler(int irq,void *dev_id) {
+  printk(KERN_INFO "Shared IRQ: Interrupt Occurred");
+  return IRQ_HANDLED;
+}
+**************************************************************************
+

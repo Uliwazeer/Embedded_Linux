@@ -1,0 +1,201 @@
+ I have one integer or long variable named etx_global_variable which is shared between two threads. Two threads are just incrementing the variable like below.
+
+Thread 1:
+
+etx_global_variable++; //Accessing the variable
+Thread 2:
+
+etx_global_variable++; //Accessing the variable
+**************************************************************************
+Now the value of etx_global_variable is 1 after the two threads are processed. Are we expecting the same value which is 1? Nope. We are expecting the value of etx_global_variable should be 2. It is not running as expected because the global variable is shared between two concurrent threads. So we need to implement synchronization because both the threads are accessing (writing/reading) the variable. We can implement synchronization like below using locks.
+
+Thread 1:
+
+lock(); //spinlock or mutex 
+etx_global_variable++; //Accessing the variable 
+unlock();
+Thread 2:
+
+lock(); //spinlock or mutex 
+etx_global_variable++; //Accessing the variable 
+unlock();
+**************************************************************************
+Great. That’s all. Now we are getting 2 in the two methods mentioned above. But has anyone thought anytime that, why 
+these things are required for a single variable? Why don’t we have an alternate method for a single variable? Yes, 
+obviously we have an alternate mechanism for integer and long variables. That is the atomic operation. If you use 
+mutex/spinlock for just a single variable, it will add overhead. In this tutorial, we gonna see the atomic variable, 
+atomic operation, and its usage.
+**************************************************************************
+An atomic_t holds an int value and atomic64_t holds the long value on all supported architectures.
+
+In Linux Kernel Version 2.6, the atomic variable has defined below.
+
+typedef struct {
+volatile int counter;
+} atomic_t;
+#ifdef CONFIG_64BIT
+typedef struct {
+volatile long counter;
+} atomic64_t;
+#endif
+Then later, they have removed volatile and defined as below.
+
+typedef struct {
+int counter;
+} atomic_t;
+#ifdef CONFIG_64BIT
+typedef struct {
+long counter;
+} atomic64_t;
+#endif
+**************************************************************************
+Types of atomic variables
+Two different atomic variables are there.
+
+Atomic variables that operate on Integers
+Atomic variables that operate on Individual Bits
+**************************************************************************
+Atomic Integer Operations
+When we are doing atomic operations, that variable should be created using atomic_t or atomic64_t. So we have separate special functions for reading, writing, and arithmetic operations, and those are explained below.
+
+The declarations are needed to use the atomic integer operations are in <asm/atomic.h>. Some architectures provide additional methods that are unique to that architecture, but all architectures provide at least a minimum set of operations that are used throughout the kernel. When you write kernel code, you can ensure that these operations are correctly implemented on all architectures.
+
+Creating atomic variables
+atomic_t etx_global_variable; /* define etx_global_variable */
+or
+atomic_t etx_global_variable = ATOMIC_INIT(0); /* define etx_global_variable and initialize it to zero */
+Reading atomic variables
+atomic_read
+This function atomically reads the value of the given atomic variable.
+
+int atomic_read(atomic_t *v);
+
+where,
+
+v – pointer of type atomic_t
+
+Return: It returns the integer value.
+
+Other operations on atomic variables
+atomic_set
+This function atomically sets the value to the atomic variable.
+
+void atomic_set(atomic_t *v, int i);
+
+where,
+v – the pointer of type atomic_t
+i – the value to be set to v
+
+atomic_add
+This function atomically adds value to the atomic variable.
+
+void atomic_add(int i, atomic_t *v);
+
+where,
+i – the value to be added to v
+v – the pointer of type atomic_t
+
+atomic_sub
+This function atomically subtracts the value from the atomic variable.
+
+void atomic_sub(int i, atomic_t *v);
+
+where,
+i – the value to be subtracted from v
+v – the pointer of type atomic_t
+
+atomic_inc
+This function atomically increments the value of the atomic variable by 1.
+
+void atomic_inc (atomic_t *v);
+
+where,
+v – the pointer of type atomic_t
+
+atomic_dec
+This function atomically decrements the value of the atomic variable by 1.
+
+void atomic_dec (atomic_t *v);
+
+where,
+v – the pointer of type atomic_t
+
+atomic_sub_and_test
+This function atomically subtracts the value from the atomic variable and test the result is zero or not.
+
+void atomic_sub_and_test(int i, atomic_t *v);
+
+where,
+i – the value to be subtracted from v
+v – the pointer of type atomic_t
+
+Return: It returns true if the result is zero, or false for all other cases.
+
+atomic_dec_and_test
+This function atomically decrements the value of the atomic variable by 1 and test the result is zero or not.
+
+void atomic_dec_and_test(atomic_t *v);
+
+where,
+v – the pointer of type atomic_t
+
+Return: It returns true if the result is zero, or false for all other cases.
+
+atomic_inc_and_test
+This function atomically increments the value of the atomic variable by 1 and test the result is zero or not.
+
+void atomic_inc_and_test(atomic_t *v);
+
+where,
+v – the pointer of type atomic_t
+
+Return: It returns true if the result is zero, or false for all other cases.
+
+atomic_add_negative
+This function atomically adds the value to the atomic variable and test the result is negative or not.
+
+void atomic_add_negative(int i, atomic_t *v);
+
+where,
+i – the value to be added to v
+v – the pointer of type atomic_t
+
+Return: It returns true if the result is negative, or false for all other cases.
+
+atomic_add_return
+This function atomically adds the value to the atomic variable and returns the value.
+
+void atomic_add_return(int i, atomic_t *v);
+
+where,
+i – the value to be added to v
+v – the pointer of type atomic_t
+
+Return : It returns true if the result the value (i + v).
+**************************************************************************
+There is a 64-bit version also available. Unlike atomic_t, that will operate on 64 bits. This 64-bit version also has a similar function like above, the only change is we have to use 64.
+
+Example
+
+atomic64_t etx_global_variable = ATOMIC64_INIT(0);
+long atomic64_read(atomic64_t *v);
+void atomic64_set(atomic64_t *v, int i);
+void atomic64_add(int i, atomic64_t *v);
+void atomic64_sub(int i, atomic64_t *v);
+void atomic64_inc(atomic64_t *v);
+void atomic64_dec(atomic64_t *v);
+int atomic64_sub_and_test(int i, atomic64_t *v);
+int atomic64_add_negative(int i, atomic64_t *v);
+long atomic64_add_return(int i, atomic64_t *v);
+long atomic64_sub_return(int i, atomic64_t *v);
+long atomic64_inc_return(int i, atomic64_t *v);
+long atomic64_dec_return(int i, atomic64_t *v);
+int atomic64_dec_and_test(atomic64_t *v);
+int atomic64_inc_and_test(atomic64_t *v);
+But all the operations are the same as atomic_t.
+**************************************************************************
+Atomic Bitwise Operations
+Atomic_t is good when we are working on integer arithmetic. But when it comes to bitwise atomic operation, it doesn’t work well. So kernel offers separate functions to achieve that. Atomic bit operations are very fast. These functions are architecture-dependent and are declared in <asm/bitops.h>.
+
+These bitwise functions operate on a generic pointer. So, atomic_t / atomic64_t is not required. So we can work with a pointer to whatever data we want.
+**************************************************************************

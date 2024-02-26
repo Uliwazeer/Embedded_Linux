@@ -1,0 +1,40 @@
+When we write the value to our device file using echo value > /dev/etx_value, it will invoke the interrupt. Because we configured the interrupt by using the software. If you don’t know how it works, please refer to this tutorial (here we talked about interrupt Example).
+The interrupt will invoke the ISR function.
+In ISR, we are allocating work to the Workqueue.
+Whenever Workqueue executes, we create the Linked List Node and add the Node to the Linked List.
+When we are reading the driver using cat /dev/etx_device, printing all the nodes which are present in the Linked List using traverse.
+When we remove the driver using rmmod, it will remove all the nodes in the Linked List and free the memory.
+**************************************************************************
+/*Declare and init the head node of the linked list*/
+LIST_HEAD(Head_Node);
+
+Creating Node and adding that to the Linked List
+/*Creating Node*/
+        temp_node = kmalloc(sizeof(struct my_list), GFP_KERNEL);
+        /*Assgin the data that is received*/
+        temp_node->data = etx_value;
+        /*Init the list within the struct*/
+        INIT_LIST_HEAD(&temp_node->list);
+        /*Add Node to Linked List*/
+        list_add_tail(&temp_node->list, &Head_Node);
+**************************************************************************
+Traversing Linked List
+struct my_list *temp;
+        int count = 0;
+        printk(KERN_INFO "Read function\n");
+        /*Traversing Linked List and Print its Members*/
+        list_for_each_entry(temp, &Head_Node, list) {
+            printk(KERN_INFO "Node %d data = %d\n", count++, temp->data);
+        }
+        printk(KERN_INFO "Total Nodes = %d\n", count);
+**************************************************************************
+Deleting Linked List
+        /* Go through the list and free the memory. */
+        struct my_list *cursor, *temp;
+        list_for_each_entry_safe(cursor, temp, &Head_Node, list) {
+            list_del(&cursor->list);
+            kfree(cursor);
+        }
+**************************************************************************
+This will traverse each node using  list_for_each_entry_safe and delete that using list_del. 
+Finally, we need to free the memory which is allocated using kmalloc.

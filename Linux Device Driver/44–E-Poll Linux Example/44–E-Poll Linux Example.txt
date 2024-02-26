@@ -1,0 +1,131 @@
+Epoll in Linux Device Driver
+IO Multiplexing
+The solution is to use a kernel mechanism for polling over a set of file descriptors. There are 3 options you can use in Linux:
+
+poll
+select
+epoll
+In this tutorial, we will focus on the epoll in Linux Device Driver.
+
+What is epoll?
+epoll is an event poll and a variant of poll. It can be used either as an Edge or Level Triggered interface and scales well to large numbers of watched file descriptors.
+
+Edge triggered: a call to epoll_wait will return only when a new event is enqueued with the epoll.
+
+Level triggered: a call to epoll_wait will return as long as the condition holds.
+
+Example for Level and Edge trigger
+Let’s take this example to understand the Level and Edge triggered better.
+
+You have registered one pipe with epoll for reading. The application is able to read, only 1Kb data at a time. So, If you want to read 5Kb, you have to read 5 times.
+
+Assume someone has written 5Kb data into the pipe and it is available to read. When the application calls epoll_wait, it will return immediately as the data is available. So, the application reads 1Kb data and again calls the epoll_wait. If you have configured epoll as edge-triggered, then epoll won’t return until someone writes (new events) again into the pipe even though 4Kb data is remaining for reading. Whereas in the level-triggered, epoll_wait will return immediately as 4Kb data is remaining to read. So, the application can call epoll_wait for another 4 times without the new events.
+
+How to use epoll in Application?
+There are three system calls are provided to set up and control an epoll.
+
+epoll_create,
+epoll_ctl,
+epoll_wait.
+epoll_create
+This epoll_create creates an epoll instance. You have to include the header #include <sys/epoll.h>.
+
+int epoll_create(int size);
+
+Where,
+
+size – Size of the epoll instance. Since Linux 2.6.8, the size argument is ignored but must be greater than zero.
+
+Return:
+
+IT returns a file descriptor referring to the new epoll instance. This file descriptor is used for all the subsequent calls to the epoll interface. When no longer required, the file descriptor returned by epoll_create should be closed by using close. When all file descriptors referring to an epoll instance have been closed, the kernel destroys the instance and releases the associated resources for reuse.
+
+Note: You can use epoll_create1() also.
+
+epoll_ctl
+This system call performs control operations on the epoll instance referred to by the file descriptor epfd.
+
+int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event);
+
+Where,
+
+epfd   – This is an epoll instance that has been created using epoll_create.
+
+op       – Operations need to be performed on epfd. Example operations are,
+
+EPOLL_CTL_ADD – Register the target file descriptor fd on the epoll instance referred to by the file descriptor epfd and associate the event event with the internal file linked to fd.
+EPOLL_CTL_MOD – Change the event event associated with the target file descriptor fd.
+EPOLL_CTL_DEL – Remove (deregister) the target file descriptor fd from the epoll instance referred to by epfd.
+fd       – File descriptor to monitor.
+
+event – Events to be monitored in the file descriptor fd. Example events are,
+
+EPOLLIN – The associated file is available for read operations.
+EPOLLOUT – The associated file is available for write operations.
+EPOLLPRI – There is urgent data available for read operations.
+EPOLLERR – Error condition happened on the associated file descriptor.
+EPOLLHUP – Hang up happened on the associated file descriptor.
+EPOLLET – Sets the Edge Triggered behavior for the associated file descriptor. The default behavior for epoll is Level Triggered.
+EPOLLONESHOT (since Linux 2.6.2) – Sets the one-shot behavior for the associated file descriptor. This means that after an event is pulled out with epoll_wait the associated file descriptor is internally disabled and no other events will be reported by the epoll interface. The user must call epoll_ctl with EPOLL_CTL_MOD to rearm the file descriptor with a new event mask.
+EPOLLRDHUP (since Linux 2.6.17) – Stream socket peer closed connection or shut down writing half of the connection. (This flag is especially useful for writing simple code to detect peer shutdown when using Edge Triggered monitoring.)
+EPOLLWAKEUP – Ensure that system does not enter “suspend” or “hibernate” when this event is pending or is being processed. (EPOLLONESHOT and EPOLLET must be clear and the process should have the CAP_BLOCK_SUSPEND capability.)
+EPOLLEXCLUSIVE – Sets up the exclusive mode of a wake-up for the epoll file descriptor to which this file descriptor is being attached. Useful for avoiding the thundering herd problem in certain scenarios.
+Return:
+
+It returns zero on the successful call. When an error occurs, epoll_ctl returns -1 and errno is set appropriately.
+
+epoll_wait
+This system call waits for events on the epoll instance referred to by the file descriptor epfd.
+
+int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout);
+
+Where,
+
+epfd   – This is an epoll instance that has been created using epoll_create.
+
+events  – events that will be available for the caller (returned events).
+
+maxevents – Maximum events that can be returned by the epoll_wait. This must be greater than zero.
+
+timeout – The minimum number of milliseconds that epoll_wait will block. Specifying a timeout of -1 causes epoll_wait to block indefinitely, while specifying a timeout equal to zero causes epoll_wait to return immediately, even if no events are available.
+
+Return:
+
+epoll_wait returns the number of file descriptors ready for the requested I/O on a successful call, or zero if no file descriptor became ready during the requested timeout milliseconds. When an error occurs, epoll_wait returns -1 and errno is set appropriately.
+***********************************************************************************
+How to use a epoll in Linux Device Driver?
+We have already implemented the poll functionality in the Linux device driver side in our previous tutorial. So, we can use the same Linux device driver for epoll() too as epoll() also calls the same poll_wait() in the Linux kernel.
+
+What is the difference between epoll, poll, and select (epoll vs poll vs select)?
+In our last tutorial, we have discussed poll vs select. Now we will compare epoll with them.
+
+epoll can behave as level-triggered or edge-triggered.
+the poll is as per the POSIX standard. epoll is Linux-specific. So, epoll is non-portable.
+epoll_wait returns only the objects with ready file descriptors.
+Select supports only up to 1024 file descriptors. The performance of the poll is bad if we use more file descriptors. E-poll solves those two problems. Please refer to the below table.
+**************************************************************************************
+Epoll in Linux – Example Programming
+I have not made any changes to that Linux device driver source code (poll). And, the concept is also the same as the previous tutorial (poll in Linux).
+
+I’ve just copy-pasted the concept below from the previous tutorial for your understanding.
+
+This example is just for educational purposes and explains an epoll in Linux device driver. This might not be the real use case.
+
+In this example, I’ve created one sysfs entry (/sys/kernel/etx_sysfs/etx_value) with the reading and writing option. The epoll Linux example driver and application are supposed to work like below.
+
+Driver Concept
+When you write data using the sysfs entry (/sys/kernel/etx_sysfs/etx_value), which means data is available in the kernel. So, we have to inform the userspace application to read the available data (Driver gives the permission to the app for reading).
+When you read the data using the sysfs entry (/sys/kernel/etx_sysfs/etx_value), that means, data has been read by the kernel, and the userspace app has to write the data into the kernel space. So that driver can read the data. (Driver gives permission to the app for writing).
+So, whenever the app gets read permission, it can read the data from the driver and whenever the app gets the write permission, it can write some data into the driver.
+Application concept
+The application will open the driver’s device file (/dev/etx_device).
+Create epoll instance using epoll_create() or epoll_create1().
+Add the file descriptors and events that you want to wait for, using the epoll_ctl().
+Call the epoll_wait() with your desired timeout. In our example, we are setting 5 seconds timeout.
+So, every 5 seconds it will exit the epoll_wait and again it calls the epoll_wait.
+If this app gets the read permission from the Linux kernel driver, then it reads the data.
+If this app gets the write permission from the Linux kernel driver, then it writes the data to the driver.
+I hope that I’ve explained the concept properly without confusing you. If you are confused still, please look at the output and the example code. Then you should be better, I guess.
+
+This concept has been created to just explain the epoll from user space and driver point of view. So don’t tell us that, there is no use case like I explained (lol).
+*************************************************************************************

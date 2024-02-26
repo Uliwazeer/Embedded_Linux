@@ -1,0 +1,130 @@
+GPIO APIs in Linux kernel
+Already Kernel GPIO subsystems have provided the APIs to access the GPIOs. We will explain them one by one and its uses. Let’s go.
+
+You need to include the GPIO header file given below.
+
+#include <linux/gpio.h>
+
+Validate the GPIO
+Before using the GPIO, we must check whether the GPIO that we are planning to use is valid or not. To do that we have to use the below API.
+
+bool gpio_is_valid(int gpio_number);
+Where,
+
+gpio_number : GPIO that you are planning to use
+
+It returns false if it is not valid otherwise, it returns true.
+
+This API determines whether the GPIO number is valid or not. Sometimes this call will return false even if you send a valid number. Because that GPIO pin might be temporarily unused on a given board.
+
+Request the GPIO
+Once you have validated the GPIO, then you can request the GPIO using the below APIs.
+
+int gpio_request(unsigned gpio, const char *label)
+
+where,
+
+gpio : GPIO that you are planning to use.
+
+label :  label used by the kernel for the GPIO in sysfs. You can provide any string that can be seen in /sys/kernel/debug/gpio. Do cat /sys/kernel/debug/gpio. You can see the GPIO assigned to the particular GPIO.
+
+It returns 0 in success and a negative number in failure.
+
+Note: GPIOs must be allocated before use.
+
+There are other variants also available. You can use any one of them based on your need.
+
+int gpio_request_one(unsigned gpio, unsigned long flags, const char *label); –  Request one GPIO.
+int gpio_request_array(struct gpio *array, size_t num); – Request multiple GPIOs.
+Export the GPIO
+For debugging purposes, you can export the GPIO which is allocated using the gpio_request()to the sysfs using the below API.
+
+int gpio_export(unsigned int gpio, bool direction_may_change);
+
+where,
+
+gpio :  GPIO that you want to export.
+
+direction_may_change :  This parameter controls whether user space is allowed to change the direction of the GPIO. true – Can change, false – Can’t change.
+
+Returns zero on success, else an error.
+
+Once you export the GPIO, you can see the GPIO in /sys/class/gpio/*. There you can the GPIO’s value, etc. The example is given below.
+
+Unexport the GPIO
+If you have exported the GPIO using the gpio_export(), then you can unexport this using the below API.
+
+void gpio_unexport(unsigned int gpio)
+
+Where,
+
+gpio : GPIO that you want to unexport
+
+Set the direction of the GPIO
+When you are working on the GPIOs, you have to set the GPIO as output or input. The below APIs are used to achieve that.
+
+This API is used to set the GPIO direction as input.
+int  gpio_direction_input(unsigned gpio)
+
+Where,
+
+gpio : GPIO that you want to set the direction as input.
+
+Returns zero on success, else an error.
+
+This API is used to set the GPIO direction as output.
+int  gpio_direction_output(unsigned gpio, int value)
+
+Where,
+
+gpio : GPIO that you want to set the direction as output.
+
+value : The value of the GPIO once the output direction is effective.
+
+Returns zero on success, else an error.
+
+Change the GPIO value
+Once you set the GPIO direction as an output, then you can use the below API to change the GPIO value.
+
+gpio_set_value(unsigned int gpio, int value);
+
+where,
+
+gpio :  GPIO that you want to change the value.
+
+value : value to set to the GPIO. 0 – Low, 1 – High.
+
+Read the GPIO value
+You can read the GPIO’s value using the below API.
+
+int  gpio_get_value(unsigned gpio);
+
+where,
+
+gpio :  GPIO that you want to read the value.
+
+It returns the GPIO’s value. 0 or 1.
+
+GPIO Interrupt (IRQ)
+This concept is part of the next tutorial, where we discussed GPIO interrupts in detail.
+
+Release the GPIO
+Once you have done with the GPIO, then you can release the GPIO which you have allocated previously. The below API helps in that case.
+
+void gpio_free(unsigned int gpio);
+
+where,
+
+gpio :  GPIO that you want to release.
+
+There are other variants also available. You can use any one of them based on your need.
+
+void gpio_free_array(struct gpio *array, size_t num); – Release multiple GPIOs.
+Now we have seen the APIs that are available in the GPIO subsystem. Now let’s see the GPIOs available in Raspberry Pi.
+
+GPIO Raspberry PI Tutorial
+40-pins are there in the Raspberry Pi 4 Model B. You can refer here for the GPIO pinouts and their details.
+
+GPIO Programming Example
+This is a very basic GPIO tutorial. So I am not going to add all the functionalities to this driver. I will connect the one LED in the GPIO 21. And I will turn ON the LED by writing “1” to the driver. If I write “0”, then the LED will go OFF.
+**************************************************************************

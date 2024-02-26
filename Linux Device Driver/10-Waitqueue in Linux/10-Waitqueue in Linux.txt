@@ -1,0 +1,190 @@
+When you write a Linux Driver Module or Kernel Program, Some processes should wait or sleep for some event. 
+There are several ways of handling sleeping and waking up in Linux, each suited to different needs. Waitqueue is also one of the methods to handle that case.
+Whenever a process must wait for an event (such as the arrival of data or the termination of a process), it should go to sleep. 
+Sleeping causes the process to suspend execution, freeing the processor for other uses.
+After some time, the process will be woken up and will continue with its job when the event which we are waiting for has arrived.
+**************************************************************************
+Linux Waitqueue is a mechanism provided in the kernel to implement the wait. 
+As the name itself suggests, waitqueue is the list of processes waiting for an event.
+In other words, A wait queue is used to wait for someone to wake you up when a certain condition is true. 
+They must be used carefully to ensure there is no race condition.
+**************************************************************************
+There are 3 important steps in Waitqueue.
+
+1-Initializing Waitqueue
+2-Queuing (Put the Task to sleep until the event comes)
+3-Waking Up Queued Task
+**************************************************************************
+Initializing Waitqueue
+Use this Header file for Waitqueue (include /linux/wait.h). There are two ways to initialize the waitqueue.
+
+1-Static method
+2-Dynamic method
+**************************************************************************
+1. Static Method
+DECLARE_WAIT_QUEUE_HEAD(wq);
+Where the “wq” is the name of the queue on which task will be put to sleep.
+**************************************************************************
+2. Dynamic Method
+wait_queue_head_t wq;
+init_waitqueue_head (&wq);
+
+You can create a waitqueue using any one of the above methods. 
+Other operations are common for both static and dynamic method except the way we create the waitqueue.
+**************************************************************************
+Queuing
+Once the wait queue is declared and initialized, a process may use it to go to sleep. 
+There are several macros are available for different uses. We will see each one by one.
+
+wait_event
+wait_event_timeout
+wait_event_cmd
+wait_event_interruptible
+wait_event_interruptible_timeout
+wait_event_killable
+
+Old kernel versions used the functions sleep_on() and interruptible_sleep_on(), but those two functions can introduce bad race conditions and should not be used.
+
+Whenever we use the above one of the macro, it will add that task to the waitqueue which is created by us. Then it will wait for the event.
+**************************************************************************
+1. wait_event
+sleep until a condition gets true.
+
+wait_event(wq, condition);
+
+wq – the waitqueue to wait on
+
+condition – a C expression for the event to wait for
+
+The process is put to sleep (TASK_UNINTERRUPTIBLE) until the condition evaluates to true. The condition is checked each time the waitqueue wq is woken up.
+**************************************************************************
+2. wait_event_timeout
+sleep until a condition gets true or a timeout elapses
+
+wait_event_timeout(wq, condition, timeout);
+
+wq –  the waitqueue to wait on
+
+condtion – a C expression for the event to wait for
+
+timeout –  timeout, in jiffies
+
+The process is put to sleep (TASK_UNINTERRUPTIBLE) until the condition evaluates to true or timeout elapses. The condition is checked each time the waitqueue wq is woken up.
+
+It returns 0 if the condition evaluated to false after the timeout elapsed, 1 if the condition evaluated to true after the timeout elapsed, 
+or the remaining jiffies (at least 1) if the condition evaluated to true before the timeout elapsed.
+**************************************************************************
+3. wait_event_cmd
+sleep until a condition gets true
+
+wait_event_cmd(wq, condition, cmd1, cmd2);
+
+wq –  the waitqueue to wait on
+
+condtion – a C expression for the event to wait for
+
+cmd1 – the command will be executed before sleep
+
+cmd2 – the command will be executed after sleep
+
+The process is put to sleep (TASK_UNINTERRUPTIBLE) until the condition evaluates to true. 
+The condition is checked each time the waitqueue wq is woken up.
+**************************************************************************
+4. wait_event_interruptible
+sleep until a condition gets true
+
+wait_event_interruptible(wq, condition);
+
+wq –  the waitqueue to wait on
+
+condtion – a C expression for the event to wait for
+
+The process is put to sleep (TASK_INTERRUPTIBLE) until the condition evaluates to true or a signal is received. 
+The condition is checked each time the waitqueue wq is woken up.
+
+The function will return -ERESTARTSYS if it was interrupted by a signal and 0 if condition evaluated to true.
+**************************************************************************
+5. wait_event_interruptible_timeout
+sleep until a condition gets true or a timeout elapses
+
+wait_event_interruptible_timeout(wq, condition, timeout);
+
+wq –  the waitqueue to wait on
+
+condtion – a C expression for the event to wait for
+
+timeout –  timeout, in jiffies
+
+The process is put to sleep (TASK_INTERRUPTIBLE) until the condition evaluates to true or a signal is received or timeout elapsed. 
+The condition is checked each time the waitqueue wq is woken up.
+
+It returns, 0 if the condition evaluated to false after the timeout elapsed, 1 if the condition evaluated to true after the timeout elapsed, 
+the remaining jiffies (at least 1) if the condition evaluated to true before the timeout elapsed, or -ERESTARTSYS if it was interrupted by a signal.
+**************************************************************************
+6. wait_event_killable
+sleep until a condition gets true
+
+wait_event_killable(wq, condition);
+
+wq –  the waitqueue to wait on
+
+condtion – a C expression for the event to wait for
+
+The process is put to sleep (TASK_KILLABLE) until the condition evaluates to true or a signal is received. 
+The condition is checked each time the waitqueue wq is woken up.
+
+The function will return -ERESTARTSYS if it was interrupted by a signal and 0 if condition evaluated to true.
+**************************************************************************
+Waking Up Queued Task
+When some Tasks are in sleep mode because of the waitqueue, then we can use the below function to wake up those tasks.
+
+1-wake_up
+2-wake_up_all
+3-wake_up_interruptible
+4-wake_up_sync and wake_up_interruptible_sync
+**************************************************************************
+1. wake_up
+wakes up only one process from the wait queue which is in non-interruptible sleep.
+
+wake_up(&wq);
+
+wq – the waitqueue to wake up
+**************************************************************************
+2. wake_up_all
+wakes up all the processes on the wait queue
+
+wake_up_all(&wq);
+
+wq – the waitqueue to wake up
+**************************************************************************
+3. wake_up_interruptible
+wakes up only one process from the wait queue that is in interruptible sleep
+
+wake_up_interruptible(&wq);
+
+wq – the waitqueue to wake up
+**************************************************************************
+4. wake_up_sync and wake_up_interruptible_sync
+wake_up_sync(&wq);
+wake_up_interruptible_sync(&wq);
+Normally, a wake_up call can cause an immediate reschedule to happen, meaning that other processes might run before wake_up returns. 
+The “synchronous” variants instead make any awakened processes runnable but do not reschedule the CPU. This is used to avoid rescheduling 
+when the current process is known to be going to sleep, thus forcing a reschedule anyway. Note that awakened processes 
+could run immediately on a different processor, so these functions should not be expected to provide mutual exclusion.
+**************************************************************************
+Driver Source Code – WaitQueue in Linux
+First, I will explain to you the concept of driver code.
+
+In this source code, two places we are sending a wake_up. One from the read function and another one from the driver exit function.
+
+I’ve created one thread (wait_function) which has while(1). That thread will always wait for the event. It will sleep until it 
+gets a wake_up call. When it gets the wake_up call, it will check the condition.
+
+If the condition is 1, then the wakeup came from the read function. If it is 2, then the wakeup came from an exit function. 
+If wake_up comes from the read function, it will print the read count and it will again wait. If it is from the exit function, it will exit from the thread.
+
+Here I’ve added two versions of the code.
+
+Waitqueue created by static method
+Waitqueue created by dynamic method
+**************************************************************************

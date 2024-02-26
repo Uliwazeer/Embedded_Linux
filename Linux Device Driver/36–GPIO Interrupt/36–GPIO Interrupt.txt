@@ -1,0 +1,41 @@
+Set the debounce-interval
+The below API is used for sets debounce time for a GPIO. Right now raspberry pi is not supporting that. That’s why we have commented on that line in our source code. Instead, we used some software hack to eliminate multiple times IRQ being called for a single rising edge transition. You can remove the software hack and uncomment that gpio_set_debounce() if your microcontroller supports this.
+
+int gpiod_set_debounce(unsigned gpio, unsigned debounce);
+
+where,
+
+gpio :  GPIO that you want to set the debounce value.
+
+debounce : Delay of the debounce.
+
+It returns 0 on success. otherwise, <0.
+
+Get the IRQ number for the GPIO
+Using the below API, you can get the IRQ number for the specific GPIO.
+
+int gpio_to_irq(unsigned gpio);
+
+where,
+
+gpio :  GPIO that you want to get the IRQ number.
+
+Request the IRQ
+Here is where you need to register the GPIO IRQ number and its handler to the Linux Interrupts with the proper interrupt flags. You can find the details regarding requesting the GPIO here. Please note that you have to free the IRQ once you are done with the interrupt.
+
+Interrupt Flags
+While registering the GPIO interrupt using request_irq() you can use any one of the flags based on your need.
+
+IRQF_TRIGGER_RISING  
+IRQF_TRIGGER_FALLING
+IRQF_TRIGGER_HIGH   
+IRQF_TRIGGER_LOW
+So we are all set. Let’s jump into the programming.
+
+Example Programming
+In this example, I have just taken the 2 GPIOs. One is for the input and one is for the output.
+
+GPIO 21 – OUTPUT
+GPIO 25 – INPUT
+LED has been connected to the OUTPUT pin (GPIO 21) and the Vibration sensor has been connected to the INPUT pin (GPIO 25). You can connect the push-button also into the INPUT pin.
+**************************************************************************

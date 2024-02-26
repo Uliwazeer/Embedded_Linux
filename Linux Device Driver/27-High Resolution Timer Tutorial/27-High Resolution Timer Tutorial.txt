@@ -1,0 +1,204 @@
+High Resolution Timer (HRT/hrtimer)
+In our last tutorial, we have seen a kernel timer. Now we are talking about the high-resolution timer. Everyone might have some questions. Why the hell do we need two timers? Why can they merge two timers into one? Can’t able to integrate? Yes. They have tried to merge these two timers. But they have failed. Because Cascading Timer Wheel (CTW) is used in the kernel timer. Cascading Timer Wheel (CTW) code is fundamentally not suitable for such an approach as merging these two timers. Because hrtimer is maintaining a time-ordered data structure of timers (timers are inserted in time order to minimize processing at activation time). The data structure used is a red-black tree, which is ideal for performance-focused applications (and happens to be available generically as a library within the kernel).
+
+Kernel Timers are bound to jiffies. But this High Resolution Timer (HRT) is bound with 64-bit nanoseconds resolution.
+
+With kernel version 2.6.21 onwards, high resolution timers (HRT) are available under Linux. For this, the kernel has to be compiled with the configuration parameter CONFIG_HIGH_RES_TIMERS enabled.
+
+There are many ways to check whether high resolution timers are available,
+
+In the /boot directory, check the kernel config file. It should have a line like CONFIG_HIGH_RES_TIMERS=y.
+Check the contents of /proc/timer_list. For example, the .resolution entry showing 1 nanosecond and event_handler as hrtimer_interrupt in /proc/timer_list indicate that high resolution timers are available.
+Get the clock resolution using the clock_getres system call.
+Users of High Resolution Timer
+The primary users of precision timers are user-space applications that utilize nanosleep, posix-timers, and Interval Timer (itimer) interfaces.
+In kernel, users like drivers and subsystems require precisely timed events (e.g. multimedia).
+High Resolution timer API
+We need to include the <linux/hrtimer.h> (#include <linux/hrtimer.h>) in order to use kernel timers. Kernel timers are described by the hrtimer structure, defined in <linux/hrtimer.h>:
+
+struct hrtimer {
+  struct rb_node node;
+  ktime_t expires;
+  int (* function) (struct hrtimer *);
+  struct hrtimer_base * base;
+};
+Where,
+
+node – red black tree node for time ordered insertion
+
+expires – the absolute expiry time in the hr timers internal representation. The time is related to the clock on which the timer is based.
+
+function – timer expiry callback function. This function has an integer return value, which should be either HRTIMER_NORESTART (for a one-shot timer that should not be started again) or HRTIMER_RESTART for a recurring timer. In the restart case, the callback must set a new expiration time before returning.
+
+base – pointer to the timer base (per CPU and per clock)
+
+The hrtimer structure must be initialized by init_hrtimer_#CLOCKTYPE.
+
+ktime_set
+There is a new type, ktime_t, which is used to store a time value in nanoseconds. On 64-bit systems, a ktime_t is really just a 64-bit integer value in nanoseconds. On 32-bit machines, however, it is a two-field structure: one 32-bit value holds the number of seconds, and the other holds nanoseconds. The below function is used to get the ktime_t from seconds and nanoseconds.
+
+ktime_set(long secs, long nanosecs);
+
+Arguments:
+
+secs – seconds to set
+
+nsecs – nanoseconds to set
+
+Return:
+
+The ktime_t representation of the value.
+
+Initialize High Resolution Timer
+hrtimer_init
+void hrtimer_init( struct hrtimer *timer, clockid_t clock_id, enum hrtimer_mode mode );
+
+Arguments:
+
+timer – the timer to be initialized
+
+clock_id – the clock to be used
+
+The clock to use is defined in ./include/linux/time.h and represents the various clocks that the system supports (such as the real-time clock or a monotonic clock that simply represents the time from a starting point, such as system boot).
+
+CLOCK_MONOTONIC: a clock that is guaranteed always to move forward in time, but which does not reflect “wall clock time” in any specific way. In the current implementation, CLOCK_MONOTONIC resembles the jiffies tick count in that it starts at zero when the system boots and increases monotonically from there.
+
+CLOCK_REALTIME: which matches the current real-world time.
+
+mode – timer mode absolute (HRTIMER_MODE_ABS) or relative (HRTIMER_MODE_REL)
+
+Start High Resolution Timer
+Once a timer has been initialized, it can be started with the below-mentioned function.
+
+hrtimer_start
+int hrtimer_start(struct hrtimer *timer, ktime_t time, const enum hrtimer_mode mode);
+
+This call is used to (Re)start an hrtimer on the current CPU.
+
+Arguments:
+
+timer – the timer to be added
+
+time – expiry time
+
+mode – expiry mode: absolute (HRTIMER_MODE_ABS) or relative (HRTIMER_MODE_REL)
+
+Returns:
+
+0 on success 1 when the timer was active
+
+Stop High Resolution Timer
+Using the below function, we can able to stop the High Resolution Timer.
+
+hrtimer_cancel
+int hrtimer_cancel(struct hrtimer * timer);
+
+This will cancel a timer and wait for the handler to finish.
+
+Arguments:
+
+timer – the timer to be canceled
+
+Returns:
+
+0 when the timer was not active
+1 when the timer was active
+hrtimer_try_to_cancel
+int hrtimer_try_to_cancel(struct hrtimer * timer);
+
+This will try to deactivate a timer.
+
+Arguments:
+
+timer – hrtimer to stop
+
+Returns:
+
+0 when the timer was not active
+1 when the timer was active
+-1 when the timer is currently executing the callback function and cannot be stopped
+Changing the High Resolution Timer’s Timeout
+If we are using this High Resolution Timer (hrtimer) as a periodic timer, then the callback must set a new expiration time before returning. Usually, restarting timers are used by kernel subsystems that need a callback at a regular interval.
+
+hrtimer_forward
+u64 hrtimer_forward(struct hrtimer * timer, ktime_t now, ktime_t interval);
+
+This will forward the timer expiry so it will expire in the future by the given interval.
+
+Arguments:
+
+timer – hrtimer to forward
+
+now – forward past this time
+
+interval – the interval to forward
+
+Returns:
+
+Returns the number of overruns.
+
+hrtimer_forward_now
+u64 hrtimer_forward_now(struct hrtimer *timer, ktime_t interval);
+
+This will forward the timer expiry so it will expire in the future from now by the given interval.
+
+Arguments:
+
+timer – hrtimer to forward
+
+interval – the interval to forward
+
+Returns:
+
+Returns the number of overruns.
+
+Check High Resolution Timer’s status
+The below-explained functions are used to get the status and timings.
+
+hrtimer_get_remaining
+ktime_t hrtimer_get_remaining(const struct hrtimer * timer);
+
+This is used to get the remaining time for the timer.
+
+Arguments:
+
+timer – hrtimer to get the remaining time
+
+Returns:
+
+Returns the remaining time.
+
+hrtimer_callback_running
+int hrtimer_callback_running(struct hrtimer *timer);
+
+This is the helper function to check, whether the timer is running the callback function.
+
+Arguments:
+
+timer – hrtimer to check
+
+Returns:
+
+0 when the timer’s callback function is not running
+1 when the timer’s callback function is running
+hrtimer_cb_get_time
+ktime_t hrtimer_cb_get_time(struct hrtimer *timer);
+
+This function used to get the current time of the given timer.
+
+Arguments:
+
+timer – hrtimer to get the time
+
+Returns:
+
+Returns the time.
+
+Using High Resolution Timer In Linux Device Driver
+In this example, we took the basic driver source code from this tutorial. On top of that code, we have added the high resolution timer. The steps are mentioned below.
+
+Initialize and start the timer in the init function
+After the timeout, a registered timer callback will be called.
+In the timer callback function again we are forwarding the time period and return HRTIMER_RESTART. We have to do this step if we want a periodic timer. Otherwise, we can ignore that time forwarding and return HRTIMER_NORESTART.
+Once we are done, we can disable the timer.
+**************************************************************************

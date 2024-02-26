@@ -1,0 +1,119 @@
+If we have the interrupt handler who is doing more tasks then we need to divide it into two halves.
+
+1-Top Half
+2-Bottom Half
+
+
+The top half is nothing but our interrupt handler. If we want to do less work, then the top half is more than enough. No need for the bottom half in that situation.
+
+But if we have more work when interrupt hits, then we need the bottom half. The bottom half runs in the future, at a more convenient time, with all interrupts enabled.
+
+So, The job of the bottom halves is to perform any interrupt-related work not performed by the interrupt handler.
+**************************************************************************
+There are 4 bottom-half mechanisms available in Linux:
+
+1-Workqueue in Linux Kernel – Executed in a process context.
+2-Threaded IRQ
+3-Softirq – Executed in an atomic context.
+4-Tasklet – Executed in an atomic context.
+**************************************************************************
+Work queues are added in the Linux kernel 2.6 version. Work queues are a different form of deferring work. Work queues defer work into a kernel thread; this bottom half always runs in the process context.
+
+Because workqueue allows users to create a kernel thread and bind work to the kernel thread.
+
+So, this will run in the process context and the work queue can sleep.
+
+Code deferred to a work queue has all the usual benefits of process context.
+Most importantly, work queues are schedulable and can therefore sleep.
+Normally, it is easy to decide between using workqueue and softirq/tasklet:
+
+If the deferred work needs to sleep, then workqueue is used.
+If the deferred work needs not sleep, then softirq or tasklet are used.
+**************************************************************************
+There are two ways to implement Workqueue in the Linux kernel.
+
+1-Using global workqueue (Static / Dynamic)
+2-Creating Own workqueue
+**************************************************************************
+In this method no need to create any workqueue or worker thread. So in this method, we only need to initialize work. We can initialize the work using two methods.
+
+Static method
+Dynamic method
+**************************************************************************
+Initialize work using the Static Method
+The below call creates a workqueue by the name and the function that we are passing in the second argument gets scheduled in the queue.
+
+DECLARE_WORK(name, void (*func)(void *))
+
+Where,
+
+name: The name of the “work_struct” structure that has to be created.
+func: The function to be scheduled in this workqueue
+
+DECLARE_WORK(workqueue,workqueue_fn);
+**************************************************************************
+Schedule work to the Workqueue
+
+1. Schedule_work
+This function puts a job in the kernel-global workqueue if it was not already queued and leaves it in the same position on the kernel-global workqueue otherwise.
+
+int schedule_work( struct work_struct *work );
+where,
+work – job to be done
+Returns zero if work was already on the kernel-global workqueue and non-zero otherwise.
+**************************************************************************
+2. Scheduled_delayed_work
+After waiting for a given time this function puts a job in the kernel-global workqueue.
+
+int scheduled_delayed_work( struct delayed_work *dwork, unsigned long delay );
+
+where,
+
+dwork – job to be done
+
+delay– number of jiffies to wait or 0 for immediate execution
+**************************************************************************
+3. Schedule_work_on
+This puts a job on a specific CPU.
+
+int schedule_work_on( int cpu, struct work_struct *work );
+
+where,
+
+cpu– CPU to put the work task on
+
+work– job to be done
+**************************************************************************
+4. Scheduled_delayed_work_on
+After waiting for a given time this puts a job in the kernel-global workqueue on the specified CPU.
+
+int scheduled_delayed_work_on(int cpu, struct delayed_work *dwork, unsigned long delay );
+where,
+
+cpu – CPU to put the work task on
+
+dwork – job to be done
+
+delay– number of jiffies to wait or 0 for immediate execution
+**************************************************************************
+Delete work from workqueue
+There are also a number of helper functions that you can use to flush or cancel work on work queues. To flush a particular work item and block until the work is complete, you can make a call to flush_work.
+
+All work on a given work queue can be completed using a call to flush_work. In both cases, the caller blocks until the operation is complete. To flush the kernel-global work queue, call flush_scheduled_work.
+
+int flush_work( struct work_struct *work );
+void flush_scheduled_work( void );
+**************************************************************************
+Cancel Work from workqueue
+You can cancel work if it is not already executed in a handler. A call to cancel_work_sync will terminate the work in the queue or block until the callback has finished (if the work is already in progress in the handler).
+
+If the work is delayed, you can use a call to cancel_delayed_work_sync.
+
+int cancel_work_sync( struct work_struct *work );
+int cancel_delayed_work_sync( struct delayed_work *dwork );
+Check the workqueue
+Finally, you can find out whether a work item is pending (not yet executed by the handler) with a call to work_pending or delayed_work_pending.
+
+work_pending( work );
+delayed_work_pending( work );
+**************************************************************************

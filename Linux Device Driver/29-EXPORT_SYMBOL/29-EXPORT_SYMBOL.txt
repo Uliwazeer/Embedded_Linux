@@ -1,0 +1,31 @@
+printk() function. This function will be defined in source/kernel/printk/printk.c. Then how can we able to access that printk() in our driver?
+**************************************************************************
+In a programming language, a symbol is either a variable or a function. Or more generally, we can say, a symbol is a name representing space in the memory, which stores data (variable, for reading and writing) or instructions (function, for executing).
+
+When you look at some kernel codes, you may find EXPORT_SYMBOL() very often. Have you wondered any time what the heck is that?
+
+In the Linux Kernel 2.4, all the non-static symbols are exported to the kernel space automatically. But later, in Linux Kernel 2.6 instead of exporting all non-static symbols, they wanted to export the only symbols which are marked by EXPORT_SYMBOL() macro.
+**************************************************************************
+EXPORT_SYMBOL’s role
+When some symbols (variables or functions) are using EXPORT_SYMBOL macro (ex. EXPORT_SYMBOL(func_name)), those symbols are exposed to all the loadable kernel drivers. You can call them directly in your kernel module without modifying the kernel code. In other words, It tells the kbuild mechanism that the symbol referred to should be part of the global list of kernel symbols. That allows the kernel modules to access them.
+
+Only the symbols that have been explicitly exported can be used by other modules.
+
+Another macro is also available to export the symbols like EXPORT_SYMBOL. That is EXPORT_SYMBOL_GPL().
+
+EXPORT_SYMBOL exports the symbol to any loadable module.
+EXPORT_SYMBOL_GPL exports the symbol only to GPL-licensed modules.
+**************************************************************************
+How to use EXPORT_SYMBOL?
+Declare and define the symbol (functions or variables) which you want to make it visible to other kernel modules. Then below the definition, use EXPORT_SYMBOL(symbol name). Now it is visible to all loadable modules.
+Now take the kernel driver who is gonna use the above-exported symbol. Declare the symbol using extern. Then use the symbol directly.
+Finally, load the module first, who has the definition of the export symbol. Then load the caller module using insmod“.
+**************************************************************************
+Limitation
+That symbol should not be static or inline.
+Order of loading the driver is matter. ie. We should load the module which has the definition of the symbol, then only we can load the module that is using that symbol.
+**************************************************************************
+Driver 1 has one function called etx_shared_func and one global variable called etx_count. This function and variable have been shared among with all the loadable modules using EXPORT_SYMBOL.
+
+Driver 2 will be using that variable and function which are shared by Driver 1. When we read Driver 2, then it will call the shared function and we can read that variable also.
+**************************************************************************
